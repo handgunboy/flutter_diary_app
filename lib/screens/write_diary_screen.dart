@@ -1,14 +1,12 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:photo_view/photo_view.dart';
-import 'package:photo_view/photo_view_gallery.dart';
 import '../models/diary_entry.dart';
 import '../services/storage_service.dart';
 import '../services/ai_service.dart';
 import '../services/theme_service.dart';
+import '../widgets/image_gallery_screen.dart';
 import 'settings_screen.dart';
 
 class WriteDiaryScreen extends StatefulWidget {
@@ -93,30 +91,12 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
 
   Future<void> _parseWithAi() async {
     if (_summaryController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('请先输入日记总结'),
-          backgroundColor: Colors.grey[800],
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
-        ),
-      );
+      _showSnackBar('请先输入日记总结');
       return;
     }
 
     if (!_themeService.hasAiConfig) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('请先配置 AI API'),
-          backgroundColor: Colors.grey[800],
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
-        ),
-      );
+      _showSnackBar('请先配置 AI API');
       return;
     }
 
@@ -151,30 +131,12 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
         });
 
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('AI 解析完成，请检查并保存'),
-              backgroundColor: Colors.grey[800],
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-          );
+          _showSnackBar('AI 解析完成，请检查并保存');
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('AI 解析失败: $e'),
-            backgroundColor: Colors.grey[800],
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
-        );
+        _showSnackBar('AI 解析失败: $e');
       }
     } finally {
       if (mounted) {
@@ -199,16 +161,7 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('选择图片失败: $e'),
-            backgroundColor: Colors.grey[800],
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
-        );
+        _showSnackBar('选择图片失败: $e');
       }
     }
   }
@@ -516,31 +469,12 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
       await _storageService.saveEntry(entry);
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('日记保存成功'),
-            backgroundColor: Colors.grey[800],
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-            duration: const Duration(seconds: 2),
-          ),
-        );
+        _showSnackBar('日记保存成功');
         Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('保存失败: $e'),
-            backgroundColor: Colors.grey[800],
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
-        );
+        _showSnackBar('保存失败: $e');
       }
     } finally {
       if (mounted) {
@@ -597,7 +531,7 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => _ImageGalleryScreen(
+        builder: (context) => ImageGalleryScreen(
           images: _images,
           initialIndex: initialIndex,
         ),
@@ -818,6 +752,22 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
     );
   }
 
+  Widget _buildTimestampSection() {
+    if (widget.existingEntry == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Text(
+        '创建于: ${DateFormat('yyyy-MM-dd HH:mm').format(widget.existingEntry!.createdAt)}\n'
+        '最后修改: ${DateFormat('yyyy-MM-dd HH:mm').format(widget.existingEntry!.updatedAt)}',
+        style: TextStyle(
+          fontSize: 12,
+          color: Colors.grey[600],
+        ),
+        textAlign: TextAlign.center,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -826,317 +776,30 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
           key: _formKey,
           child: Column(
             children: [
-              Container(
-                padding: const EdgeInsets.only(left: 10, right: 10, top: 12, bottom: 12),
-                child: Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back),
-                      onPressed: _handleBack,
-                      tooltip: '返回',
-                    ),
-                    const SizedBox(width: 8),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.baseline,
-                      textBaseline: TextBaseline.alphabetic,
-                      children: [
-                        Text(
-                          '${widget.selectedDate.year}',
-                          style: GoogleFonts.righteous(
-                            fontSize: 28,
-                            color: Theme.of(context).colorScheme.onSurface,
-                          ),
-                        ),
-                        Text(
-                          '年',
-                          style: GoogleFonts.righteous(
-                            fontSize: 14,
-                            color: Theme.of(context).colorScheme.onSurface,
-                          ),
-                        ),
-                        Text(
-                          '${widget.selectedDate.month}',
-                          style: GoogleFonts.righteous(
-                            fontSize: 28,
-                            color: Theme.of(context).colorScheme.onSurface,
-                          ),
-                        ),
-                        Text(
-                          '月',
-                          style: GoogleFonts.righteous(
-                            fontSize: 14,
-                            color: Theme.of(context).colorScheme.onSurface,
-                          ),
-                        ),
-                        Text(
-                          '${widget.selectedDate.day}',
-                          style: GoogleFonts.righteous(
-                            fontSize: 28,
-                            color: Theme.of(context).colorScheme.onSurface,
-                          ),
-                        ),
-                        Text(
-                          '日',
-                          style: GoogleFonts.righteous(
-                            fontSize: 14,
-                            color: Theme.of(context).colorScheme.onSurface,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const Spacer(),
-                    IconButton(
-                      icon: _isLoading
-                          ? const SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.save),
-                      onPressed: _isLoading ? null : _saveDiary,
-                      tooltip: '保存日记',
-                    ),
-                  ],
-                ),
-              ),
+              _buildAppBar(),
               Expanded(
                 child: ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
                     const SizedBox(height: 16),
-                    // AI 总结输入框
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.auto_fix_high,
-                          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'AI 智能填写',
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const Spacer(),
-                        if (_themeService.hasAiConfig)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.grey[200],
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.check_circle, size: 14, color: Colors.grey[700]),
-                                const SizedBox(width: 4),
-                                Text(
-                                  '已配置',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey[700],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          )
-                        else
-                          TextButton.icon(
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => const SettingsScreen(),
-                                ),
-                              );
-                            },
-                            icon: const Icon(Icons.settings, size: 16),
-                            label: const Text('去配置'),
-                            style: TextButton.styleFrom(
-                              padding: EdgeInsets.zero,
-                              minimumSize: Size.zero,
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            ),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '输入日记总结，AI 会自动解析并填写下面的表单',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[600],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _summaryController,
-                      maxLines: 3,
-                      decoration: InputDecoration(
-                        hintText: '例如：今天天气晴朗，早上吃了豆浆油条，中午和朋友吃了火锅，心情很开心...',
-                        filled: true,
-                        fillColor: Theme.of(context).colorScheme.surface,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: _isAiParsing ? null : _parseWithAi,
-                        icon: _isAiParsing
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.auto_fix_high),
-                        label: Text(_isAiParsing ? 'AI 解析中...' : 'AI 自动填写'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.grey[700],
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            _buildImageSection(),
-            const SizedBox(height: 16),
-            _buildMealSection(),
-            const SizedBox(height: 16),
-            _buildMoodAndWeatherSection(),
-            const SizedBox(height: 16),
-            _buildContentSection(),
-            const SizedBox(height: 24),
-            if (widget.existingEntry != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: Text(
-                  '创建于: ${DateFormat('yyyy-MM-dd HH:mm').format(widget.existingEntry!.createdAt)}\n'
-                  '最后修改: ${DateFormat('yyyy-MM-dd HH:mm').format(widget.existingEntry!.updatedAt)}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[600],
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            const SizedBox(height: 32),
+                    _buildAiSection(),
+                    const SizedBox(height: 16),
+                    _buildImageSection(),
+                    const SizedBox(height: 16),
+                    _buildMealSection(),
+                    const SizedBox(height: 16),
+                    _buildMoodAndWeatherSection(),
+                    const SizedBox(height: 16),
+                    _buildContentSection(),
+                    const SizedBox(height: 24),
+                    _buildTimestampSection(),
+                    const SizedBox(height: 32),
                   ],
                 ),
               ),
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _ImageGalleryScreen extends StatefulWidget {
-  final List<String> images;
-  final int initialIndex;
-
-  const _ImageGalleryScreen({
-    required this.images,
-    required this.initialIndex,
-  });
-
-  @override
-  State<_ImageGalleryScreen> createState() => _ImageGalleryScreenState();
-}
-
-class _ImageGalleryScreenState extends State<_ImageGalleryScreen> {
-  late final PageController _pageController;
-  late int _currentIndex;
-
-  @override
-  void initState() {
-    super.initState();
-    _currentIndex = widget.initialIndex;
-    _pageController = PageController(initialPage: widget.initialIndex);
-  }
-
-  @override
-  void dispose() {
-    _pageController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Stack(
-        children: [
-          PhotoViewGallery.builder(
-            pageController: _pageController,
-            itemCount: widget.images.length,
-            onPageChanged: (index) {
-              setState(() {
-                _currentIndex = index;
-              });
-            },
-            builder: (context, index) {
-              return PhotoViewGalleryPageOptions(
-                imageProvider: FileImage(File(widget.images[index])),
-                minScale: PhotoViewComputedScale.contained,
-                maxScale: PhotoViewComputedScale.covered * 3,
-                heroAttributes: PhotoViewHeroAttributes(tag: 'image_$index'),
-              );
-            },
-            scrollPhysics: const BouncingScrollPhysics(),
-            backgroundDecoration: const BoxDecoration(
-              color: Colors.black,
-            ),
-          ),
-          Positioned(
-            top: 40,
-            right: 20,
-            child: IconButton(
-              icon: const Icon(Icons.close, color: Colors.white, size: 30),
-              onPressed: () => Navigator.pop(context),
-            ),
-          ),
-          if (widget.images.length > 1)
-            Positioned(
-              bottom: 40,
-              left: 0,
-              right: 0,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(
-                  widget.images.length,
-                  (index) => Container(
-                    width: 8,
-                    height: 8,
-                    margin: const EdgeInsets.symmetric(horizontal: 4),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: _currentIndex == index
-                          ? Colors.white
-                          : Colors.white.withOpacity(0.4),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-        ],
       ),
     );
   }
