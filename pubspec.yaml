@@ -1,0 +1,43 @@
+name: diary_app
+description: "A new Flutter project."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.8.1
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  # 本地存储
+  shared_preferences: ^2.2.0
+  # 日历组件
+  table_calendar: ^3.0.9
+  # 日期格式化
+  intl: ^0.20.2
+  # 图片选择器 - 使用最新版本
+  image_picker: ^1.0.0
+  # HTTP 请求
+  http: ^1.0.0
+  # Google 字体
+  google_fonts: ^6.1.0
+  # 图片查看器
+  photo_view: ^0.15.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+# 强制使用特定版本的插件，这些版本使用 compileSdk 35
+dependency_overrides:
+  flutter_plugin_android_lifecycle: 2.0.22
+  image_picker_android: 0.8.12+19
+
+flutter:
+  uses-material-design: true
