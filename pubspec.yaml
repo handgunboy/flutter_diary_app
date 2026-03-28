@@ -28,11 +28,23 @@ dependencies:
   google_fonts: ^6.1.0
   # 图片查看器
   photo_view: ^0.15.0
+  # 文件选择器（用于导入导出）
+  file_picker: ^8.0.0+1
+  # 路径提供者
+  path_provider: ^2.1.2
+  # 分享功能
+  share_plus: ^10.0.0
+  # 压缩文件（用于导出图片）
+  archive: ^3.4.10
+  # 打开文件/文件夹
+  open_filex: ^4.3.4
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
+  # 应用图标生成器
+  flutter_launcher_icons: ^0.14.3
 
 # 强制使用特定版本的插件，这些版本使用 compileSdk 35
 dependency_overrides:
@@ -41,3 +53,14 @@ dependency_overrides:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/images/txbb.png
+    - assets/images/APP_ICON.jpg
+
+# 应用图标配置
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/APP_ICON.jpg"
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/images/APP_ICON.jpg"

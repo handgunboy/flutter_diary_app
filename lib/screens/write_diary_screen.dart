@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
@@ -5,7 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/diary_entry.dart';
 import '../services/storage_service.dart';
 import '../services/ai_service.dart';
-import '../services/theme_service.dart';
+import '../services/theme_service.dart' show ThemeService, ImageStorageMode;
 import '../widgets/image_gallery_screen.dart';
 import 'settings_screen.dart';
 
@@ -27,7 +28,7 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
   final StorageService _storageService = StorageService();
   final AiService _aiService = AiService();
   final ThemeService _themeService = ThemeService();
-  final _contentController = TextEditingController();
+  late final _contentController = _TimeHighlightController();
   final _breakfastController = TextEditingController();
   final _lunchController = TextEditingController();
   final _dinnerController = TextEditingController();
@@ -151,13 +152,30 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
       final List<XFile> images = await picker.pickMultiImage();
 
       if (images.isNotEmpty) {
-        setState(() {
-          for (var image in images) {
-            if (!_images.contains(image.path)) {
-              _images.add(image.path);
+        final storageMode = _themeService.imageStorageMode;
+        
+        for (var image in images) {
+          if (!_images.contains(image.path)) {
+            if (storageMode == ImageStorageMode.copy) {
+              // 复制到应用文件夹
+              final copiedPath = await _storageService.copyImageToAppDirectory(image.path);
+              if (copiedPath != null) {
+                setState(() {
+                  _images.add(copiedPath);
+                });
+              } else {
+                if (mounted) {
+                  _showSnackBar('复制图片失败: ${image.path}');
+                }
+              }
+            } else {
+              // 仅保存引用
+              setState(() {
+                _images.add(image.path);
+              });
             }
           }
-        });
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -486,32 +504,47 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
   Widget _buildImageSection() {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(Icons.image, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7)),
-                const SizedBox(width: 8),
+                Icon(Icons.image, size: 18, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7)),
+                const SizedBox(width: 6),
                 Text(
-                  '图片',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  '照片',
+                  style: TextStyle(
+                    fontSize: 14,
                     fontWeight: FontWeight.bold,
+                    color: Theme.of(context).colorScheme.onSurface,
                   ),
                 ),
                 const Spacer(),
-                TextButton.icon(
-                  onPressed: _pickImages,
-                  icon: Icon(Icons.add_photo_alternate, size: 18, color: Colors.grey[600]),
-                  label: Text('添加', style: TextStyle(color: Colors.grey[600])),
+                InkWell(
+                  onTap: _pickImages,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[200],
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.add_photo_alternate, size: 14, color: Colors.grey[600]),
+                        const SizedBox(width: 4),
+                        Text('添加', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                      ],
+                    ),
+                  ),
                 ),
               ],
             ),
             if (_images.isNotEmpty) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
               SizedBox(
-                height: 100,
+                height: 80,
                 child: ListView.builder(
                   scrollDirection: Axis.horizontal,
                   itemCount: _images.length,
@@ -596,49 +629,51 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
   Widget _buildMealSection() {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(Icons.restaurant, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7)),
-                const SizedBox(width: 8),
+                Icon(Icons.restaurant, size: 18, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7)),
+                const SizedBox(width: 6),
                 Text(
                   '今天吃了啥',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  style: TextStyle(
+                    fontSize: 14,
                     fontWeight: FontWeight.bold,
+                    color: Theme.of(context).colorScheme.onSurface,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             _buildMealInput(
               controller: _breakfastController,
               label: '早餐',
               icon: Icons.wb_sunny_outlined,
-              hint: '例如：豆浆、油条',
+              hint: '豆浆、油条',
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             _buildMealInput(
               controller: _lunchController,
               label: '午餐',
               icon: Icons.wb_sunny,
-              hint: '例如：红烧肉、米饭',
+              hint: '红烧肉、米饭',
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             _buildMealInput(
               controller: _dinnerController,
               label: '晚餐',
               icon: Icons.nights_stay_outlined,
-              hint: '例如：蔬菜沙拉',
+              hint: '蔬菜沙拉',
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             _buildMealInput(
               controller: _snacksController,
-              label: '零食/其他',
+              label: '零食',
               icon: Icons.cookie_outlined,
-              hint: '例如：薯片、奶茶（可选）',
+              hint: '薯片、奶茶',
             ),
           ],
         ),
@@ -654,11 +689,13 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
   }) {
     return TextFormField(
       controller: controller,
+      style: const TextStyle(fontSize: 13),
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
-        prefixIcon: Icon(icon, size: 20),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        prefixIcon: Icon(icon, size: 18),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        isDense: true,
       ),
     );
   }
@@ -708,6 +745,122 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
     );
   }
 
+  // 日期卡片
+  Widget _buildDateSection() {
+    final weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+    final weekday = weekdays[widget.selectedDate.weekday - 1];
+    final dateStr = DateFormat('MM/dd').format(widget.selectedDate);
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.calendar_today, size: 18, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7)),
+                const SizedBox(width: 6),
+                Text(
+                  '日期',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Column(
+                children: [
+                  Text(
+                    weekday,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Theme.of(context).colorScheme.primary,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    dateStr,
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // 紧凑版天气心情（用于双列布局）
+  Widget _buildMoodAndWeatherSectionCompact() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.sentiment_satisfied, size: 18, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7)),
+                const SizedBox(width: 6),
+                Text(
+                  '心情 & 天气',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _moodController,
+              style: const TextStyle(fontSize: 13),
+              decoration: InputDecoration(
+                labelText: '心情',
+                hintText: '开心',
+                prefixIcon: Icon(Icons.mood, size: 18),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextFormField(
+              controller: _weatherController,
+              style: const TextStyle(fontSize: 13),
+              decoration: InputDecoration(
+                labelText: '天气',
+                hintText: '晴天',
+                prefixIcon: Icon(Icons.wb_sunny, size: 18),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                isDense: true,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String? _lastValue;
+
   Widget _buildContentSection() {
     return Card(
       child: Padding(
@@ -715,18 +868,8 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Icon(Icons.edit_note, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7)),
-                const SizedBox(width: 8),
-                Text(
-                  '日记内容',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
+            // 只保留 icon，去掉文字
+            Icon(Icons.edit_note, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7)),
             const SizedBox(height: 12),
             TextFormField(
               controller: _contentController,
@@ -744,6 +887,35 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
                   return '请填写日记内容';
                 }
                 return null;
+              },
+              onTap: () {
+                // 首次点击且内容为空时，添加当前时间
+                if (_contentController.text.isEmpty) {
+                  final now = DateTime.now();
+                  final timeStr = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+                  _contentController.text = '$timeStr ';
+                  _lastValue = _contentController.text;
+                  // 将光标移到末尾
+                  _contentController.selection = TextSelection.fromPosition(
+                    TextPosition(offset: _contentController.text.length),
+                  );
+                }
+              },
+              onChanged: (value) {
+                // 检测是否刚输入了换行符（通过比较上次值和当前值）
+                if (_lastValue != null && 
+                    value.length > _lastValue!.length &&
+                    value.endsWith('\n')) {
+                  final now = DateTime.now();
+                  final timeStr = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+                  // 在换行后添加时间
+                  _contentController.text = '$value$timeStr ';
+                  // 将光标移到末尾
+                  _contentController.selection = TextSelection.fromPosition(
+                    TextPosition(offset: _contentController.text.length),
+                  );
+                }
+                _lastValue = _contentController.text;
               },
             ),
           ],
@@ -782,14 +954,26 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
                   padding: const EdgeInsets.all(16),
                   children: [
                     const SizedBox(height: 16),
-                    _buildAiSection(),
-                    const SizedBox(height: 16),
+                    // 第一行：照片（单独一行，最上面）
                     _buildImageSection(),
                     const SizedBox(height: 16),
-                    _buildMealSection(),
+                    // 第二行：今天吃了啥（左）+ 心情天气（右）
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // 左侧：今天吃了啥
+                        Expanded(
+                          child: _buildMealSection(),
+                        ),
+                        const SizedBox(width: 12),
+                        // 右侧：心情天气
+                        Expanded(
+                          child: _buildMoodAndWeatherSectionCompact(),
+                        ),
+                      ],
+                    ),
                     const SizedBox(height: 16),
-                    _buildMoodAndWeatherSection(),
-                    const SizedBox(height: 16),
+                    // 第三行：内容
                     _buildContentSection(),
                     const SizedBox(height: 24),
                     _buildTimestampSection(),
@@ -802,5 +986,61 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
         ),
       ),
     );
+  }
+}
+
+// 自定义 TextEditingController，用于高亮时间格式
+class _TimeHighlightController extends TextEditingController {
+  // 时间格式正则表达式 (HH:mm)
+  final RegExp _timeRegex = RegExp(r'\b(\d{2}):(\d{2})\b');
+
+  @override
+  TextSpan buildTextSpan({required BuildContext context, TextStyle? style, required bool withComposing}) {
+    final List<InlineSpan> spans = [];
+    final String text = this.text;
+
+    int lastMatchEnd = 0;
+
+    // 获取主题颜色
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final timeColor = isDark ? Colors.grey[400] : Colors.grey[700];
+
+    // 查找所有时间格式并高亮
+    for (final Match match in _timeRegex.allMatches(text)) {
+      // 添加时间前的普通文本
+      if (match.start > lastMatchEnd) {
+        spans.add(TextSpan(
+          text: text.substring(lastMatchEnd, match.start),
+          style: style,
+        ));
+      }
+
+      // 添加时间纯文本样式 - 使用 TextSpan 而不是 WidgetSpan，便于删除
+      final timeText = match.group(0)!;
+      spans.add(TextSpan(
+        text: timeText,
+        style: (style ?? const TextStyle()).copyWith(
+          color: timeColor,
+          fontWeight: FontWeight.w500,
+        ),
+      ));
+
+      lastMatchEnd = match.end;
+    }
+
+    // 添加剩余文本
+    if (lastMatchEnd < text.length) {
+      spans.add(TextSpan(
+        text: text.substring(lastMatchEnd),
+        style: style,
+      ));
+    }
+
+    // 如果没有匹配到时间，返回普通文本
+    if (spans.isEmpty) {
+      return TextSpan(text: text, style: style);
+    }
+
+    return TextSpan(children: spans);
   }
 }

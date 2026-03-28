@@ -1,4 +1,7 @@
 import 'dart:convert';
+import 'dart:io';
+import 'package:archive/archive.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/diary_entry.dart';
 import '../models/favorite_item.dart';
@@ -7,6 +10,7 @@ class StorageService {
   static const String _diaryKey = 'diary_entries';
   static const String _initializedKey = 'diary_initialized';
   static const String _favoritesKey = 'favorite_items';
+  static const String _dataClearedKey = 'data_cleared'; // 标记数据是否被手动清除
 
   static final StorageService _instance = StorageService._internal();
   factory StorageService() => _instance;
@@ -14,15 +18,31 @@ class StorageService {
 
   Future<SharedPreferences> get _prefs async => await SharedPreferences.getInstance();
 
+  // 获取所有未删除的日记（正常列表）
   Future<List<DiaryEntry>> getAllEntries() async {
     final prefs = await _prefs;
     final String? jsonString = prefs.getString(_diaryKey);
 
     if (jsonString == null) {
-      // 首次使用，初始化测试数据
-      await _initSampleData();
-      return getAllEntries();
+      return [];
     }
+
+    try {
+      final List<dynamic> jsonList = jsonDecode(jsonString);
+      final entries = jsonList.map((json) => DiaryEntry.fromJson(json)).toList();
+      // 只返回未删除的日记
+      return entries.where((e) => e.deletedAt == null).toList();
+    } catch (e) {
+      return [];
+    }
+  }
+
+  // 获取所有日记（包括已删除的，用于回收站）
+  Future<List<DiaryEntry>> _getAllEntriesIncludingDeleted() async {
+    final prefs = await _prefs;
+    final String? jsonString = prefs.getString(_diaryKey);
+
+    if (jsonString == null) return [];
 
     try {
       final List<dynamic> jsonList = jsonDecode(jsonString);
@@ -32,155 +52,10 @@ class StorageService {
     }
   }
 
-  Future<void> _initSampleData() async {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-
-    // 测试数据：今天、前几天、前两年的今天
-    final sampleEntries = [
-      // 今天的日记
-      DiaryEntry(
-        id: 'sample_today_1',
-        date: today,
-        title: '美好的一天',
-        content: '今天是充实的一天，早上喝了杯咖啡，工作效率很高。下午去公园散步，看到了美丽的夕阳。心情很好！',
-        breakfast: '豆浆、油条',
-        lunch: '红烧肉、米饭',
-        dinner: '蔬菜沙拉',
-        snacks: '奶茶',
-        mood: '开心',
-        weather: '晴天',
-        createdAt: today,
-        updatedAt: today,
-      ),
-      DiaryEntry(
-        id: 'sample_today_2',
-        date: today,
-        title: '工作感悟',
-        content: '今天完成了一个重要的项目，感觉很有成就感。团队合作很顺利，大家都很给力。',
-        breakfast: '牛奶、面包',
-        lunch: '牛肉面',
-        dinner: '寿司',
-        mood: '幸福',
-        weather: '多云',
-        createdAt: today.add(const Duration(hours: -2)),
-        updatedAt: today.add(const Duration(hours: -2)),
-      ),
-
-      // 前一天的日记
-      DiaryEntry(
-        id: 'sample_yesterday',
-        date: today.subtract(const Duration(days: 1)),
-        title: '昨天的回忆',
-        content: '昨天和朋友聚餐，聊了很多有趣的话题。晚上回家看了部电影，很放松。',
-        breakfast: '粥、咸菜',
-        lunch: '火锅',
-        dinner: '烧烤',
-        snacks: '薯片',
-        mood: '平静',
-        weather: '阴天',
-        createdAt: today.subtract(const Duration(days: 1)),
-        updatedAt: today.subtract(const Duration(days: 1)),
-      ),
-
-      // 前两天的日记
-      DiaryEntry(
-        id: 'sample_2days_ago',
-        date: today.subtract(const Duration(days: 2)),
-        title: '周末时光',
-        content: '周末去爬山了，虽然有点累但是风景很美。山顶的空气很清新，心情也变好了。',
-        breakfast: '鸡蛋、牛奶',
-        lunch: '三明治',
-        dinner: '火锅',
-        mood: '疲惫',
-        weather: '晴天',
-        createdAt: today.subtract(const Duration(days: 2)),
-        updatedAt: today.subtract(const Duration(days: 2)),
-      ),
-
-      // 前三天的日记
-      DiaryEntry(
-        id: 'sample_3days_ago',
-        date: today.subtract(const Duration(days: 3)),
-        title: ' rainy day',
-        content: '今天下雨了，在家看书听音乐。这样的天气很适合宅在家里，泡一杯热茶。',
-        breakfast: '燕麦粥',
-        lunch: '泡面',
-        dinner: '外卖',
-        snacks: '巧克力',
-        mood: '平静',
-        weather: '下雨',
-        createdAt: today.subtract(const Duration(days: 3)),
-        updatedAt: today.subtract(const Duration(days: 3)),
-      ),
-
-      // 前四年的今天
-      DiaryEntry(
-        id: 'sample_1year_ago',
-        date: DateTime(today.year - 1, today.month, today.day),
-        title: '一年前的今天',
-        content: '一年前的今天，我在准备一个重要考试。每天都在努力学习，虽然辛苦但是值得。',
-        breakfast: '包子、豆浆',
-        lunch: '快餐',
-        dinner: '家常菜',
-        mood: '焦虑',
-        weather: '多云',
-        createdAt: DateTime(today.year - 1, today.month, today.day),
-        updatedAt: DateTime(today.year - 1, today.month, today.day),
-      ),
-
-      // 前两年的今天
-      DiaryEntry(
-        id: 'sample_2years_ago',
-        date: DateTime(today.year - 2, today.month, today.day),
-        title: '两年前的回忆',
-        content: '两年前的今天，第一次去海边旅行。海风吹在脸上，海浪拍打着沙滩，那种感觉至今难忘。',
-        breakfast: '酒店早餐',
-        lunch: '海鲜大餐',
-        dinner: '烧烤',
-        snacks: '椰子汁',
-        mood: '开心',
-        weather: '晴天',
-        createdAt: DateTime(today.year - 2, today.month, today.day),
-        updatedAt: DateTime(today.year - 2, today.month, today.day),
-      ),
-
-      // 前三年的今天
-      DiaryEntry(
-        id: 'sample_3years_ago',
-        date: DateTime(today.year - 3, today.month, today.day),
-        title: '三年前的故事',
-        content: '三年前的今天，刚入职新公司。一切都那么新鲜，认识了很多新同事，学到了很多东西。',
-        breakfast: '面包',
-        lunch: '公司食堂',
-        dinner: '和同事聚餐',
-        mood: '开心',
-        weather: '晴天',
-        createdAt: DateTime(today.year - 3, today.month, today.day),
-        updatedAt: DateTime(today.year - 3, today.month, today.day),
-      ),
-
-      // 前四年的今天
-      DiaryEntry(
-        id: 'sample_4years_ago',
-        date: DateTime(today.year - 4, today.month, today.day),
-        title: '四年前的今天',
-        content: '四年前的今天，大学毕业典礼。和同学们告别，大家都各奔东西了。怀念那段青春时光。',
-        breakfast: '宿舍泡面',
-        lunch: '散伙饭',
-        dinner: 'KTV snacks',
-        snacks: '啤酒',
-        mood: '难过',
-        weather: '阴天',
-        createdAt: DateTime(today.year - 4, today.month, today.day),
-        updatedAt: DateTime(today.year - 4, today.month, today.day),
-      ),
-    ];
-
-    final prefs = await _prefs;
-    final jsonList = sampleEntries.map((e) => e.toJson()).toList();
-    await prefs.setString(_diaryKey, jsonEncode(jsonList));
-    await prefs.setBool(_initializedKey, true);
+  // 获取回收站中的日记
+  Future<List<DiaryEntry>> getDeletedEntries() async {
+    final entries = await _getAllEntriesIncludingDeleted();
+    return entries.where((e) => e.deletedAt != null).toList();
   }
 
   Future<void> saveEntry(DiaryEntry entry) async {
@@ -200,12 +75,61 @@ class StorageService {
     await prefs.setString(_diaryKey, jsonEncode(jsonList));
   }
 
+  // 软删除日记
   Future<void> deleteEntry(String id) async {
     final prefs = await _prefs;
-    final entries = await getAllEntries();
-    
+    final entries = await _getAllEntriesIncludingDeleted();
+
+    final index = entries.indexWhere((e) => e.id == id);
+    if (index >= 0) {
+      entries[index] = entries[index].copyWith(
+        deletedAt: DateTime.now(),
+      );
+
+      final jsonList = entries.map((e) => e.toJson()).toList();
+      await prefs.setString(_diaryKey, jsonEncode(jsonList));
+    }
+  }
+
+  // 恢复日记
+  Future<void> restoreEntry(String id) async {
+    final prefs = await _prefs;
+    final entries = await _getAllEntriesIncludingDeleted();
+
+    final index = entries.indexWhere((e) => e.id == id);
+    if (index >= 0) {
+      entries[index] = entries[index].copyWith(
+        deletedAt: null,
+      );
+
+      final jsonList = entries.map((e) => e.toJson()).toList();
+      await prefs.setString(_diaryKey, jsonEncode(jsonList));
+    }
+  }
+
+  // 永久删除日记
+  Future<void> permanentlyDeleteEntry(String id) async {
+    final prefs = await _prefs;
+    final entries = await _getAllEntriesIncludingDeleted();
+
     entries.removeWhere((e) => e.id == id);
-    
+
+    final jsonList = entries.map((e) => e.toJson()).toList();
+    await prefs.setString(_diaryKey, jsonEncode(jsonList));
+  }
+
+  // 清理超过30天的已删除日记
+  Future<void> cleanupOldDeletedEntries() async {
+    final prefs = await _prefs;
+    final entries = await _getAllEntriesIncludingDeleted();
+    final now = DateTime.now();
+
+    entries.removeWhere((e) {
+      if (e.deletedAt == null) return false;
+      final daysSinceDeleted = now.difference(e.deletedAt!).inDays;
+      return daysSinceDeleted >= 30;
+    });
+
     final jsonList = entries.map((e) => e.toJson()).toList();
     await prefs.setString(_diaryKey, jsonEncode(jsonList));
   }
@@ -318,5 +242,238 @@ class StorageService {
     await prefs.remove(_diaryKey);
     await prefs.remove(_favoritesKey);
     await prefs.remove(_initializedKey);
+    // 设置数据已清除标记，防止自动重新初始化测试数据
+    await prefs.setBool(_dataClearedKey, true);
+    
+    // 清除应用目录下的图片文件夹
+    try {
+      final Directory appDir = await getApplicationDocumentsDirectory();
+      
+      // 删除 images 文件夹
+      final Directory imagesDir = Directory('${appDir.path}/images');
+      if (await imagesDir.exists()) {
+        await imagesDir.delete(recursive: true);
+      }
+      
+      // 删除 imported_images 文件夹
+      final Directory importedImagesDir = Directory('${appDir.path}/imported_images');
+      if (await importedImagesDir.exists()) {
+        await importedImagesDir.delete(recursive: true);
+      }
+    } catch (e) {
+      print('清除图片文件夹失败: $e');
+    }
+  }
+
+  // 复制图片到应用目录
+  Future<String?> copyImageToAppDirectory(String sourcePath) async {
+    try {
+      final Directory appDir = await getApplicationDocumentsDirectory();
+      final String imagesDir = '${appDir.path}/images';
+      
+      // 创建 images 目录（如果不存在）
+      final Directory dir = Directory(imagesDir);
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
+      }
+      
+      // 生成唯一文件名
+      final String fileName = '${DateTime.now().millisecondsSinceEpoch}_${sourcePath.split('/').last.split('\\').last}';
+      final String destPath = '$imagesDir/$fileName';
+      
+      // 复制文件
+      final File sourceFile = File(sourcePath);
+      if (await sourceFile.exists()) {
+        await sourceFile.copy(destPath);
+        return destPath;
+      }
+      return null;
+    } catch (e) {
+      print('复制图片失败: $e');
+      return null;
+    }
+  }
+
+  // 导出所有日记数据为 ZIP（包含图片）
+  Future<String?> exportDataWithImages() async {
+    try {
+      final entries = await _getAllEntriesIncludingDeleted();
+      
+      // 收集所有图片路径
+      final List<String> allImages = [];
+      for (var entry in entries) {
+        allImages.addAll(entry.images);
+      }
+      final uniqueImages = allImages.toSet().toList();
+      
+      // 创建数据 JSON
+      final data = {
+        'version': '1.0',
+        'exportTime': DateTime.now().toIso8601String(),
+        'entries': entries.map((e) => e.toJson()).toList(),
+        'images': uniqueImages,
+      };
+      
+      // 创建 ZIP 文件
+      final archive = Archive();
+      
+      // 添加数据文件
+      final jsonBytes = utf8.encode(jsonEncode(data));
+      archive.addFile(ArchiveFile('data.json', jsonBytes.length, jsonBytes));
+      
+      // 添加图片文件
+      for (var imagePath in uniqueImages) {
+        final file = File(imagePath);
+        if (await file.exists()) {
+          final bytes = await file.readAsBytes();
+          final fileName = imagePath.split('/').last.split('\\').last;
+          archive.addFile(ArchiveFile('images/$fileName', bytes.length, bytes));
+        }
+      }
+      
+      // 编码 ZIP
+      final zipBytes = ZipEncoder().encode(archive);
+      if (zipBytes == null) return null;
+      
+      // 保存到临时文件
+      final tempDir = await getTemporaryDirectory();
+      final fileName = 'diary_backup_${DateTime.now().millisecondsSinceEpoch}.zip';
+      final zipPath = '${tempDir.path}/$fileName';
+      final zipFile = File(zipPath);
+      await zipFile.writeAsBytes(zipBytes);
+      
+      return zipPath;
+    } catch (e) {
+      print('导出数据失败: $e');
+      return null;
+    }
+  }
+
+  // 导入 ZIP 文件（包含数据和图片）
+  Future<bool> importDataFromZip(String zipPath) async {
+    try {
+      print('开始导入 ZIP: $zipPath');
+      
+      final zipFile = File(zipPath);
+      if (!await zipFile.exists()) {
+        print('ZIP 文件不存在');
+        return false;
+      }
+      
+      final bytes = await zipFile.readAsBytes();
+      print('ZIP 文件大小: ${bytes.length} bytes');
+      
+      final archive = ZipDecoder().decodeBytes(bytes);
+      print('ZIP 包含 ${archive.length} 个文件');
+      
+      // 找到数据文件
+      ArchiveFile? dataFile;
+      final List<ArchiveFile> imageFiles = [];
+      
+      for (var file in archive) {
+        print('ZIP 中的文件: ${file.name}');
+        if (file.name == 'data.json') {
+          dataFile = file;
+        } else if (file.name.startsWith('images/')) {
+          imageFiles.add(file);
+        }
+      }
+      
+      if (dataFile == null) {
+        print('未找到 data.json 文件');
+        return false;
+      }
+      
+      print('找到 ${imageFiles.length} 张图片');
+      
+      // 解析数据
+      final jsonString = utf8.decode(dataFile.content);
+      final data = jsonDecode(jsonString);
+      
+      // 获取应用目录
+      final appDir = await getApplicationDocumentsDirectory();
+      final imagesDir = Directory('${appDir.path}/imported_images');
+      if (!await imagesDir.exists()) {
+        await imagesDir.create(recursive: true);
+      }
+      
+      // 解压图片
+      final Map<String, String> pathMapping = {}; // 旧路径 -> 新路径
+      for (var imageFile in imageFiles) {
+        final fileName = imageFile.name.split('/').last;
+        final newPath = '${imagesDir.path}/$fileName';
+        final file = File(newPath);
+        await file.writeAsBytes(imageFile.content);
+        pathMapping[fileName] = newPath;
+      }
+      
+      // 更新日记中的图片路径
+      final List<dynamic> entriesJson = data['entries'];
+      for (var entryJson in entriesJson) {
+        final List<dynamic> oldImages = entryJson['images'] ?? [];
+        final List<String> newImages = [];
+        for (var oldPath in oldImages) {
+          final fileName = oldPath.split('/').last.split('\\').last;
+          if (pathMapping.containsKey(fileName)) {
+            newImages.add(pathMapping[fileName]!);
+          } else {
+            // 如果图片不在 ZIP 中，保留原路径（可能是引用模式）
+            newImages.add(oldPath);
+          }
+        }
+        entryJson['images'] = newImages;
+      }
+      
+      // 导入数据
+      return await importData(data);
+    } catch (e) {
+      print('导入 ZIP 失败: $e');
+      return false;
+    }
+  }
+
+  // 导入日记数据
+  Future<bool> importData(Map<String, dynamic> data) async {
+    try {
+      final prefs = await _prefs;
+      
+      // 验证数据格式
+      if (!data.containsKey('entries')) {
+        print('导入失败：数据格式不正确，缺少 entries 字段');
+        return false;
+      }
+      
+      final List<dynamic> entriesJson = data['entries'];
+      print('正在导入 ${entriesJson.length} 条日记');
+      
+      final List<DiaryEntry> newEntries = entriesJson
+          .map((json) => DiaryEntry.fromJson(json))
+          .toList();
+      
+      // 获取现有数据
+      final existingEntries = await _getAllEntriesIncludingDeleted();
+      
+      // 合并数据（根据 ID 去重，新数据覆盖旧数据）
+      final Map<String, DiaryEntry> entryMap = {};
+      for (var entry in existingEntries) {
+        entryMap[entry.id] = entry;
+      }
+      for (var entry in newEntries) {
+        entryMap[entry.id] = entry;
+      }
+      
+      // 保存合并后的数据
+      final jsonList = entryMap.values.map((e) => e.toJson()).toList();
+      await prefs.setString(_diaryKey, jsonEncode(jsonList));
+      
+      // 清除数据已清除标记，因为现在有数据了
+      await prefs.remove(_dataClearedKey);
+      
+      print('导入成功，共 ${entryMap.length} 条日记');
+      return true;
+    } catch (e) {
+      print('导入数据失败: $e');
+      return false;
+    }
   }
 }

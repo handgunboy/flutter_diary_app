@@ -7,11 +7,18 @@ enum ThemeModeType {
   system,
 }
 
+enum ImageStorageMode {
+  copy, // 复制到应用文件夹
+  reference, // 只保存引用
+}
+
 class ThemeService extends ChangeNotifier {
   static const String _themeKey = 'theme_mode';
   static const String _aiPromptKey = 'ai_prompt';
   static const String _aiApiUrlKey = 'ai_api_url';
   static const String _aiApiKeyKey = 'ai_api_key';
+  static const String _aiDataAccessKey = 'ai_data_access';
+  static const String _imageStorageModeKey = 'image_storage_mode';
 
   // 单例模式
   static final ThemeService _instance = ThemeService._internal();
@@ -22,12 +29,16 @@ class ThemeService extends ChangeNotifier {
   String _aiPrompt = '';
   String _aiApiUrl = '';
   String _aiApiKey = '';
+  bool _aiDataAccess = false;
+  ImageStorageMode _imageStorageMode = ImageStorageMode.copy;
   bool _isInitialized = false;
 
   ThemeModeType get themeMode => _themeMode;
   String get aiPrompt => _aiPrompt;
   String get aiApiUrl => _aiApiUrl;
   String get aiApiKey => _aiApiKey;
+  bool get aiDataAccess => _aiDataAccess;
+  ImageStorageMode get imageStorageMode => _imageStorageMode;
 
   // 确保只初始化一次
   Future<void> ensureInitialized() async {
@@ -43,6 +54,9 @@ class ThemeService extends ChangeNotifier {
     _aiPrompt = prefs.getString(_aiPromptKey) ?? '';
     _aiApiUrl = prefs.getString(_aiApiUrlKey) ?? '';
     _aiApiKey = prefs.getString(_aiApiKeyKey) ?? '';
+    _aiDataAccess = prefs.getBool(_aiDataAccessKey) ?? false;
+    final storageModeIndex = prefs.getInt(_imageStorageModeKey) ?? 0;
+    _imageStorageMode = ImageStorageMode.values[storageModeIndex];
     notifyListeners();
   }
 
@@ -70,6 +84,20 @@ class ThemeService extends ChangeNotifier {
   }
 
   bool get hasAiConfig => _aiApiUrl.isNotEmpty && _aiApiKey.isNotEmpty;
+
+  Future<void> setAiDataAccess(bool enabled) async {
+    _aiDataAccess = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_aiDataAccessKey, enabled);
+    notifyListeners();
+  }
+
+  Future<void> setImageStorageMode(ImageStorageMode mode) async {
+    _imageStorageMode = mode;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_imageStorageModeKey, mode.index);
+    notifyListeners();
+  }
 
   ThemeMode get flutterThemeMode {
     switch (_themeMode) {

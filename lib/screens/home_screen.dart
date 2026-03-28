@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
@@ -8,6 +9,8 @@ import '../widgets/diary_card.dart';
 import 'write_diary_screen.dart';
 import 'favorites_screen.dart';
 import 'settings_screen.dart';
+import 'recycle_bin_screen.dart';
+import 'ai_chat_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -293,27 +296,65 @@ class _HomeScreenState extends State<HomeScreen> {
                       onPressed: _toggleSearch,
                       tooltip: _isSearching ? '关闭搜索' : '搜索',
                     ),
+                    // IconButton(
+                    //   icon: const Icon(Icons.bookmark),
+                    //   onPressed: () {
+                    //     Navigator.push(
+                    //       context,
+                    //       MaterialPageRoute(
+                    //         builder: (context) => const FavoritesScreen(),
+                    //       ),
+                    //     );
+                    //   },
+                    //   tooltip: '收藏夹',
+                    // ),
                     IconButton(
-                      icon: const Icon(Icons.bookmark),
-                      onPressed: () {
+                      icon: const Icon(Icons.delete_outline),
+                      onPressed: () async {
+                        final result = await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const RecycleBinScreen(),
+                          ),
+                        );
+                        // 如果回收站有数据变化，刷新主页
+                        if (result == true) {
+                          _loadEntries();
+                        }
+                      },
+                      tooltip: '回收站',
+                    ),
+                    InkWell(
+                      onTap: () {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => const FavoritesScreen(),
+                            builder: (context) => const AiChatScreen(),
                           ),
                         );
                       },
-                      tooltip: '收藏夹',
+                      child: Padding(
+                        padding: const EdgeInsets.all(8),
+                        child: Image.asset(
+                          'assets/images/txbb.png',
+                          width: 24,
+                          height: 24,
+                        ),
+                      ),
                     ),
                     IconButton(
                       icon: const Icon(Icons.settings),
-                      onPressed: () {
-                        Navigator.push(
+                      onPressed: () async {
+                        final result = await Navigator.push(
                           context,
                           MaterialPageRoute(
                             builder: (context) => const SettingsScreen(),
                           ),
                         );
+                        // 如果设置页面返回 true（数据被清除），刷新主页
+                        if (result == true) {
+                          _loadEntries();
+                        }
                       },
                       tooltip: '设置',
                     ),
@@ -434,183 +475,788 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildCalendarDrawer() {
-    return Drawer(
-      child: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: SingleChildScrollView(
-                child: Column(
-                  children: [
-                    TableCalendar<DiaryEntry>(
-                      firstDay: DateTime.utc(2020, 1, 1),
-                      lastDay: DateTime.utc(2030, 12, 31),
-                      focusedDay: _focusedDay,
-                      selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
-                      eventLoader: _getEventsForDay,
-                      onDaySelected: (selectedDay, focusedDay) {
-                        final now = DateTime.now();
-                        final today = DateTime(now.year, now.month, now.day);
-                        final targetDay = DateTime(selectedDay.year, selectedDay.month, selectedDay.day);
-                        final dayOffset = targetDay.difference(today).inDays;
-                        final pageIndex = 10000 + dayOffset;
-                        
-                        setState(() {
-                          _selectedDay = selectedDay;
-                          _focusedDay = focusedDay;
-                        });
-                        
-                        _pageController.jumpToPage(pageIndex);
-                        _scaffoldKey.currentState?.closeDrawer();
-                      },
-                      onFormatChanged: (format) {
-                        setState(() {
-                          _calendarFormat = format;
-                        });
-                      },
-                      onPageChanged: (focusedDay) {
-                        setState(() {
-                          _focusedDay = focusedDay;
-                        });
-                      },
-                      calendarFormat: CalendarFormat.month,
-                      availableCalendarFormats: const {
-                        CalendarFormat.month: '月',
-                      },
-                      sixWeekMonthsEnforced: true,
-                      calendarStyle: CalendarStyle(
-                        markersMaxCount: 1,
-                        markerDecoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.primary,
-                          shape: BoxShape.circle,
+    return SizedBox(
+      width: MediaQuery.of(context).size.width,
+      child: Drawer(
+        child: SafeArea(
+          child: SingleChildScrollView(
+            child: Column(
+              children: [
+                // 自定义年月选择器
+                _buildCalendarHeader(),
+              // 日历主体 - 设置固定高度
+              SizedBox(
+                height: 350,
+                child: TableCalendar<DiaryEntry>(
+                  firstDay: DateTime.utc(2020, 1, 1),
+                  lastDay: DateTime.utc(2030, 12, 31),
+                  focusedDay: _focusedDay,
+                  selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
+                  eventLoader: _getEventsForDay,
+                  onDaySelected: (selectedDay, focusedDay) {
+                    final now = DateTime.now();
+                    final today = DateTime(now.year, now.month, now.day);
+                    final targetDay = DateTime(selectedDay.year, selectedDay.month, selectedDay.day);
+                    final dayOffset = targetDay.difference(today).inDays;
+                    final pageIndex = 10000 + dayOffset;
+
+                    setState(() {
+                      _selectedDay = selectedDay;
+                      _focusedDay = focusedDay;
+                    });
+
+                    _pageController.jumpToPage(pageIndex);
+                    _scaffoldKey.currentState?.closeDrawer();
+                  },
+                  onFormatChanged: (format) {
+                    setState(() {
+                      _calendarFormat = format;
+                    });
+                  },
+                  onPageChanged: (focusedDay) {
+                    setState(() {
+                      _focusedDay = focusedDay;
+                    });
+                  },
+                  calendarFormat: CalendarFormat.month,
+                  availableCalendarFormats: const {
+                    CalendarFormat.month: '月',
+                  },
+                  sixWeekMonthsEnforced: true,
+                  headerVisible: false, // 隐藏默认的header
+                  calendarStyle: CalendarStyle(
+                    markersMaxCount: 1,
+                    markerDecoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.primary,
+                      shape: BoxShape.circle,
+                    ),
+                    selectedDecoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.primary,
+                      shape: BoxShape.circle,
+                    ),
+                    todayDecoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.primaryContainer,
+                      shape: BoxShape.circle,
+                    ),
+                    todayTextStyle: TextStyle(
+                      color: Theme.of(context).colorScheme.primary,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  daysOfWeekStyle: DaysOfWeekStyle(
+                    weekdayStyle: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurface,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    weekendStyle: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurface,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  locale: 'en_US',
+                  calendarBuilders: CalendarBuilders(
+                    dowBuilder: (context, day) {
+                      final weekdays = ['一', '二', '三', '四', '五', '六', '日'];
+                      final weekdayIndex = day.weekday - 1; // Monday = 1, so index = 0
+                      final isWeekend = day.weekday == 6 || day.weekday == 7; // Saturday or Sunday
+                      final isDark = Theme.of(context).brightness == Brightness.dark;
+                      
+                      return Center(
+                        child: Text(
+                          weekdays[weekdayIndex],
+                          style: TextStyle(
+                            color: isWeekend
+                                ? (isDark ? Colors.grey[500] : Colors.grey[600])
+                                : (isDark ? Colors.grey[400] : Colors.grey[800]),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
                         ),
-                        selectedDecoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.primary,
-                          shape: BoxShape.circle,
-                        ),
-                        todayDecoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.primaryContainer,
-                          shape: BoxShape.circle,
-                        ),
-                        todayTextStyle: TextStyle(
-                          color: Theme.of(context).colorScheme.primary,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      headerStyle: HeaderStyle(
-                        formatButtonVisible: true,
-                        titleCentered: true,
-                        formatButtonDecoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.primaryContainer,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        formatButtonTextStyle: TextStyle(
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                        leftChevronIcon: Icon(
-                          Icons.chevron_left,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                        rightChevronIcon: Icon(
-                          Icons.chevron_right,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                      ),
-                      daysOfWeekStyle: DaysOfWeekStyle(
-                        weekdayStyle: TextStyle(
-                          color: Theme.of(context).colorScheme.onSurface,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        weekendStyle: TextStyle(
-                          color: Colors.red[400],
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      locale: 'en_US',
-                      calendarBuilders: CalendarBuilders(
-                        defaultBuilder: (context, day, focusedDay) {
-                          return Center(
-                            child: Text(
-                              '${day.day}',
-                              style: GoogleFonts.righteous(
-                                fontSize: 16,
-                                color: Theme.of(context).colorScheme.onSurface,
-                              ),
-                            ),
-                          );
-                        },
-                        todayBuilder: (context, day, focusedDay) {
-                          return Center(
-                            child: Container(
-                              width: 32,
-                              height: 32,
-                              decoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.primaryContainer,
-                                shape: BoxShape.circle,
-                              ),
-                              child: Center(
-                                child: Text(
-                                  '${day.day}',
-                                  style: GoogleFonts.righteous(
-                                    fontSize: 16,
-                                    color: Theme.of(context).colorScheme.primary,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                        selectedBuilder: (context, day, focusedDay) {
-                          return Center(
-                            child: Container(
-                              width: 32,
-                              height: 32,
-                              decoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.primary,
-                                shape: BoxShape.circle,
-                              ),
-                              child: Center(
-                                child: Text(
-                                  '${day.day}',
-                                  style: GoogleFonts.righteous(
-                                    fontSize: 16,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                        outsideBuilder: (context, day, focusedDay) {
-                          return Center(
-                            child: Text(
-                              '${day.day}',
-                              style: GoogleFonts.righteous(
-                                fontSize: 16,
-                                color: Colors.grey[400],
-                              ),
-                            ),
-                          );
-                        },
-                        disabledBuilder: (context, day, focusedDay) {
-                          return Center(
-                            child: Text(
-                              '${day.day}',
-                              style: GoogleFonts.righteous(
-                                fontSize: 16,
-                                color: Colors.grey[300],
-                              ),
-                            ),
-                          );
-                        },
+                      );
+                    },
+                    defaultBuilder: (context, day, focusedDay) {
+                      return _buildCalendarDay(day, focusedDay, false, false);
+                    },
+                    todayBuilder: (context, day, focusedDay) {
+                      return _buildCalendarDay(day, focusedDay, true, false);
+                    },
+                    selectedBuilder: (context, day, focusedDay) {
+                      return _buildCalendarDay(day, focusedDay, false, true);
+                    },
+                    outsideBuilder: (context, day, focusedDay) {
+                      return _buildCalendarDay(day, focusedDay, false, false, isOutside: true);
+                    },
+                    disabledBuilder: (context, day, focusedDay) {
+                      return _buildCalendarDay(day, focusedDay, false, false, isDisabled: true);
+                    },
+                  ),
+                ),
+              ),
+              // 分割线
+              Divider(
+                height: 1,
+                thickness: 1,
+                color: Colors.grey[300],
+                indent: 16,
+                endIndent: 16,
+              ),
+              // 当月日记列表 - 不再使用 Expanded，高度自适应
+              _buildMonthlyDiaryListForScrollable(),
+            ],
+          ),
+        ),
+      ),
+    ),
+    );
+  }
+
+  Widget _buildCalendarHeader() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? Colors.grey[800] : Colors.grey[200];
+    final textColor = isDark ? Colors.grey[300] : Colors.grey[700];
+    final iconColor = isDark ? Colors.grey[400] : Colors.grey[600];
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: Row(
+        children: [
+          // 年份选择 - 下拉框样式
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: bgColor,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<int>(
+                value: _focusedDay.year,
+                icon: Icon(Icons.arrow_drop_down, size: 20, color: iconColor),
+                style: GoogleFonts.righteous(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: textColor,
+                ),
+                dropdownColor: isDark ? Colors.grey[800] : Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                menuMaxHeight: 200,
+                items: List.generate(11, (index) {
+                  final year = 2020 + index;
+                  return DropdownMenuItem<int>(
+                    value: year,
+                    child: Text(
+                      '$year',
+                      style: GoogleFonts.righteous(
+                        fontSize: 16,
+                        fontWeight: year == _focusedDay.year ? FontWeight.bold : FontWeight.normal,
                       ),
                     ),
-                  ],
+                  );
+                }),
+                onChanged: (int? year) {
+                  if (year != null) {
+                    setState(() {
+                      _focusedDay = DateTime(year, _focusedDay.month, 1);
+                    });
+                  }
+                },
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          // 月份选择 - 下拉框样式
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: bgColor,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<int>(
+                value: _focusedDay.month,
+                icon: Icon(Icons.arrow_drop_down, size: 20, color: iconColor),
+                style: GoogleFonts.righteous(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: textColor,
+                ),
+                dropdownColor: isDark ? Colors.grey[800] : Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                menuMaxHeight: 200,
+                items: List.generate(12, (index) {
+                  final month = index + 1;
+                  return DropdownMenuItem<int>(
+                    value: month,
+                    child: Text(
+                      '$month',
+                      style: GoogleFonts.righteous(
+                        fontSize: 16,
+                        fontWeight: month == _focusedDay.month ? FontWeight.bold : FontWeight.normal,
+                      ),
+                    ),
+                  );
+                }),
+                onChanged: (int? month) {
+                  if (month != null) {
+                    setState(() {
+                      _focusedDay = DateTime(_focusedDay.year, month, 1);
+                    });
+                  }
+                },
+              ),
+            ),
+          ),
+          const Spacer(),
+          // 返回今天按钮 - 灰色
+          IconButton(
+            onPressed: () => _goToToday(),
+            icon: Icon(
+              Icons.my_location,
+              size: 20,
+              color: iconColor,
+            ),
+            tooltip: '定位到今天',
+            padding: const EdgeInsets.all(8),
+            constraints: const BoxConstraints(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 获取某天的第一个日记的第一张图片
+  String? _getDayFirstImage(DateTime day) {
+    final date = DateTime(day.year, day.month, day.day);
+    final entries = _events[date] ?? [];
+    if (entries.isEmpty) return null;
+    
+    // 获取第一个日记的第一张图片
+    final firstEntry = entries.first;
+    if (firstEntry.images.isNotEmpty) {
+      return firstEntry.images.first;
+    }
+    return null;
+  }
+
+  Widget _buildCalendarDay(
+    DateTime day,
+    DateTime focusedDay,
+    bool isToday,
+    bool isSelected, {
+    bool isOutside = false,
+    bool isDisabled = false,
+  }) {
+    final imagePath = _getDayFirstImage(day);
+    final textColor = isDisabled
+        ? Colors.grey[300]
+        : isOutside
+            ? Colors.grey[400]
+            : isSelected
+                ? Colors.white
+                : Theme.of(context).colorScheme.onSurface;
+
+    Widget dayWidget = AspectRatio(
+      aspectRatio: 1,
+      child: Container(
+        margin: const EdgeInsets.all(2),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          color: isSelected
+              ? Theme.of(context).colorScheme.primary
+              : isToday
+                  ? Theme.of(context).colorScheme.primaryContainer
+                  : Colors.transparent,
+        ),
+        child: Center(
+          child: Text(
+            '${day.day}',
+            style: GoogleFonts.righteous(
+              fontSize: 16,
+              color: textColor,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    // 如果有图片，显示图片背景
+    if (imagePath != null && !isDisabled) {
+      dayWidget = AspectRatio(
+        aspectRatio: 1,
+        child: Container(
+          margin: const EdgeInsets.all(2),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: isSelected
+                ? Border.all(
+                    color: Theme.of(context).colorScheme.primary,
+                    width: 2,
+                  )
+                : null,
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                // 图片背景
+                Image.file(
+                  File(imagePath),
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    // 图片加载失败时显示默认样式
+                    return Container(
+                      color: isToday
+                          ? Theme.of(context).colorScheme.primaryContainer
+                          : Colors.grey[200],
+                    );
+                  },
+                ),
+                // 半透明遮罩，让日期数字更清晰
+                Container(
+                  color: isSelected
+                      ? Theme.of(context).colorScheme.primary.withOpacity(0.3)
+                      : Colors.black.withOpacity(0.2),
+                ),
+                // 日期数字
+                Center(
+                  child: Text(
+                    '${day.day}',
+                    style: GoogleFonts.righteous(
+                      fontSize: 16,
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      shadows: [
+                        Shadow(
+                          color: Colors.black.withOpacity(0.5),
+                          blurRadius: 2,
+                          offset: const Offset(0, 1),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return dayWidget;
+  }
+
+  void _showYearPicker() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('选择年份'),
+          content: SizedBox(
+            width: 300,
+            height: 300,
+            child: ListView.builder(
+              itemCount: 11, // 2020-2030
+              itemBuilder: (context, index) {
+                final year = 2020 + index;
+                final isSelected = year == _focusedDay.year;
+                return ListTile(
+                  title: Text(
+                    '$year年',
+                    style: TextStyle(
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                      color: isSelected ? Theme.of(context).colorScheme.primary : null,
+                    ),
+                  ),
+                  trailing: isSelected ? Icon(
+                    Icons.check,
+                    color: Theme.of(context).colorScheme.primary,
+                  ) : null,
+                  onTap: () {
+                    setState(() {
+                      _focusedDay = DateTime(year, _focusedDay.month, 1);
+                    });
+                    Navigator.pop(context);
+                  },
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showMonthPicker() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('选择月份'),
+          content: SizedBox(
+            width: 300,
+            child: GridView.builder(
+              shrinkWrap: true,
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 4,
+                childAspectRatio: 1.5,
+              ),
+              itemCount: 12,
+              itemBuilder: (context, index) {
+                final month = index + 1;
+                final isSelected = month == _focusedDay.month;
+                return InkWell(
+                  onTap: () {
+                    setState(() {
+                      _focusedDay = DateTime(_focusedDay.year, month, 1);
+                    });
+                    Navigator.pop(context);
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: isSelected ? Theme.of(context).colorScheme.primary : null,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Center(
+                      child: Text(
+                        '$month月',
+                        style: TextStyle(
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                          color: isSelected ? Colors.white : Theme.of(context).colorScheme.onSurface,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _goToToday() {
+    final now = DateTime.now();
+    setState(() {
+      _focusedDay = now;
+      _selectedDay = now;
+    });
+    // 只在日历内部跳转到今天，不关闭侧边栏，不跳回主页
+  }
+
+  // 获取当月有图片日记的日期列表
+  List<DateTime> _getMonthDaysWithEntries() {
+    final List<DateTime> daysWithEntries = [];
+    final year = _focusedDay.year;
+    final month = _focusedDay.month;
+
+    // 获取当月所有日期
+    final firstDay = DateTime(year, month, 1);
+    final lastDay = DateTime(year, month + 1, 0);
+
+    for (int day = 1; day <= lastDay.day; day++) {
+      final date = DateTime(year, month, day);
+      final entries = _events[date] ?? [];
+      // 只添加有图片的日记日期
+      if (entries.isNotEmpty && entries.first.images.isNotEmpty) {
+        daysWithEntries.add(date);
+      }
+    }
+
+    // 按日期倒序排列
+    daysWithEntries.sort((a, b) => b.compareTo(a));
+    return daysWithEntries;
+  }
+
+  // 获取周几的中文名称
+  String _getWeekdayName(DateTime date) {
+    final weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+    return weekdays[date.weekday - 1];
+  }
+
+  Widget _buildMonthlyDiaryList() {
+    final daysWithEntries = _getMonthDaysWithEntries();
+
+    if (daysWithEntries.isEmpty) {
+      return Center(
+        child: Text(
+          '本月暂无日记',
+          style: TextStyle(
+            fontSize: 14,
+            color: Colors.grey[500],
+          ),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      itemCount: daysWithEntries.length,
+      itemBuilder: (context, index) {
+        final date = daysWithEntries[index];
+        final entries = _events[date] ?? [];
+        final firstEntry = entries.first;
+
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        
+        return InkWell(
+          onTap: () {
+            final now = DateTime.now();
+            final today = DateTime(now.year, now.month, now.day);
+            final targetDay = DateTime(date.year, date.month, date.day);
+            final dayOffset = targetDay.difference(today).inDays;
+            final pageIndex = 10000 + dayOffset;
+
+            setState(() {
+              _selectedDay = date;
+              _focusedDay = date;
+            });
+
+            _pageController.jumpToPage(pageIndex);
+            _scaffoldKey.currentState?.closeDrawer();
+          },
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 左侧：周几和日期 - 添加灰色背景
+                Container(
+                  width: 50,
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.grey[800] : Colors.grey[200],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    children: [
+                      Text(
+                        _getWeekdayName(date),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDark ? Colors.grey[400] : Colors.grey[600],
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${date.day}',
+                        style: GoogleFonts.righteous(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.grey[200] : Colors.grey[800],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                // 右侧：图片卡片
+                Expanded(
+                  child: _buildDiaryCard(firstEntry, isDark: isDark),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // 可滚动版本的日记列表 - 外层已有 SingleChildScrollView，这里只用 Column
+  Widget _buildMonthlyDiaryListForScrollable() {
+    final daysWithEntries = _getMonthDaysWithEntries();
+
+    if (daysWithEntries.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.all(16),
+        child: Center(
+          child: Text(
+            '本月暂无日记',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey[500],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: Column(
+        children: daysWithEntries.map((date) {
+          final entries = _events[date] ?? [];
+          final firstEntry = entries.first;
+          final isDark = Theme.of(context).brightness == Brightness.dark;
+          
+          return InkWell(
+            onTap: () {
+              final now = DateTime.now();
+              final today = DateTime(now.year, now.month, now.day);
+              final targetDay = DateTime(date.year, date.month, date.day);
+              final dayOffset = targetDay.difference(today).inDays;
+              final pageIndex = 10000 + dayOffset;
+
+              setState(() {
+                _selectedDay = date;
+                _focusedDay = date;
+              });
+
+              _pageController.jumpToPage(pageIndex);
+              _scaffoldKey.currentState?.closeDrawer();
+            },
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 左侧：周几和日期 - 添加灰色背景
+                  Container(
+                    width: 50,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.grey[800] : Colors.grey[200],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      children: [
+                        Text(
+                          _getWeekdayName(date),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isDark ? Colors.grey[400] : Colors.grey[600],
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${date.day}',
+                          style: GoogleFonts.righteous(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: isDark ? Colors.grey[200] : Colors.grey[800],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  // 右侧：图片卡片
+                  Expanded(
+                    child: _buildDiaryCard(firstEntry, isDark: isDark),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildDiaryCard(DiaryEntry entry, {bool isDark = false}) {
+    final hasImage = entry.images.isNotEmpty;
+    final cardColor = isDark ? Colors.grey[850] : Colors.white;
+    final tagBgColor = isDark ? Colors.grey[800] : Colors.grey[200];
+    final tagTextColor = isDark ? Colors.grey[400] : Colors.grey[700];
+    final shadowColor = isDark ? Colors.black.withOpacity(0.2) : Colors.black.withOpacity(0.05);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: shadowColor,
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 图片区域
+          if (hasImage)
+            ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+              child: AspectRatio(
+                aspectRatio: 16 / 9,
+                child: Image.file(
+                  File(entry.images.first),
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      color: isDark ? Colors.grey[700] : Colors.grey[200],
+                      child: Icon(Icons.image_not_supported, color: isDark ? Colors.grey[500] : Colors.grey[400]),
+                    );
+                  },
                 ),
               ),
             ),
-          ],
-        ),
+          // 标签区域
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: isDark ? Colors.grey[900] : Colors.grey[50],
+              borderRadius: hasImage
+                  ? const BorderRadius.vertical(bottom: Radius.circular(12))
+                  : BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                // 心情标签 - 简洁无背景
+                if (entry.mood != null)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (MoodIcons.getIcon(entry.mood!) != null) ...[
+                        Icon(
+                          MoodIcons.getIcon(entry.mood!)!,
+                          size: 14,
+                          color: tagTextColor,
+                        ),
+                        const SizedBox(width: 4),
+                      ],
+                      Text(
+                        entry.mood!,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: tagTextColor,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                if (entry.mood != null && entry.weather != null)
+                  const SizedBox(width: 12),
+                // 天气标签 - 简洁无背景
+                if (entry.weather != null)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (WeatherIcons.getIcon(entry.weather!) != null) ...[
+                        Icon(
+                          WeatherIcons.getIcon(entry.weather!)!,
+                          size: 14,
+                          color: tagTextColor,
+                        ),
+                        const SizedBox(width: 4),
+                      ],
+                      Text(
+                        entry.weather!,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: tagTextColor,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -13,6 +13,7 @@ class DiaryEntry {
   final DateTime createdAt;
   final DateTime updatedAt;
   final bool isFavorite;
+  final DateTime? deletedAt; // 软删除时间，null表示未删除
 
   DiaryEntry({
     required this.id,
@@ -29,6 +30,7 @@ class DiaryEntry {
     required this.createdAt,
     required this.updatedAt,
     this.isFavorite = false,
+    this.deletedAt,
   });
 
   Map<String, dynamic> toJson() {
@@ -47,6 +49,7 @@ class DiaryEntry {
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
       'isFavorite': isFavorite,
+      'deletedAt': deletedAt?.toIso8601String(),
     };
   }
 
@@ -66,6 +69,7 @@ class DiaryEntry {
       createdAt: DateTime.parse(json['createdAt']),
       updatedAt: DateTime.parse(json['updatedAt']),
       isFavorite: json['isFavorite'] ?? false,
+      deletedAt: json['deletedAt'] != null ? DateTime.parse(json['deletedAt']) : null,
     );
   }
 
@@ -84,6 +88,7 @@ class DiaryEntry {
     DateTime? createdAt,
     DateTime? updatedAt,
     bool? isFavorite,
+    Object? deletedAt = const Object(), // 使用特殊值来区分"未传入"和"传入null"
   }) {
     return DiaryEntry(
       id: id ?? this.id,
@@ -100,6 +105,7 @@ class DiaryEntry {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       isFavorite: isFavorite ?? this.isFavorite,
+      deletedAt: deletedAt == const Object() ? this.deletedAt : deletedAt as DateTime?,
     );
   }
 }

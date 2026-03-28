@@ -4,19 +4,24 @@ import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'screens/home_screen.dart';
 import 'services/theme_service.dart';
+import 'services/storage_service.dart';
 
-void main() {
+void main() async {
   // 确保 Flutter 绑定初始化
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // 优化帧率：设置为最高可用帧率
   _setHighRefreshRate();
-  
+
   // 初始化 ThemeService
   final themeService = ThemeService();
-  themeService.ensureInitialized().then((_) {
-    runApp(const MyApp());
-  });
+  await themeService.ensureInitialized();
+
+  // 清理超过30天的已删除日记
+  final storageService = StorageService();
+  await storageService.cleanupOldDeletedEntries();
+
+  runApp(const MyApp());
 }
 
 void _setHighRefreshRate() {
@@ -54,6 +59,15 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   @override
+  void didChangePlatformBrightness() {
+    super.didChangePlatformBrightness();
+    // 当系统主题变化时，如果设置为跟随系统，则刷新UI
+    if (_themeService.themeMode == ThemeModeType.system) {
+      setState(() {});
+    }
+  }
+
+  @override
   void dispose() {
     _themeService.removeListener(_onThemeChanged);
     WidgetsBinding.instance.removeObserver(this);
@@ -67,7 +81,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: '日记本',
+      title: 'wlog',
       debugShowCheckedModeBanner: false,
       // 性能优化：使用 const 构造函数
       localizationsDelegates: const [
