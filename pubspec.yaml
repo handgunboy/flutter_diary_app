@@ -38,6 +38,10 @@ dependencies:
   archive: ^3.4.10
   # 打开文件/文件夹
   open_filex: ^4.3.4
+  # 本地通知
+  flutter_local_notifications: ^18.0.1
+  # 时区支持（用于定时通知）
+  timezone: ^0.10.0
 
 dev_dependencies:
   flutter_test:

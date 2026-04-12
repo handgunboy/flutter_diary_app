@@ -100,13 +100,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
     });
 
     try {
-      // 获取当前月日记数据（如果用户授权）
-      String diaryContext = '';
-      if (_aiService.canAccessData) {
-        diaryContext = await _aiService.getCurrentMonthDiaries();
-      }
-
-      // 构建系统提示词
+      // 构建系统提示词（简化版，因为 Function Calling 会自动处理数据获取）
       String systemPrompt = '''你是"小坡"，一款日记应用中的智能 AI 助手。你的主要职责是帮助用户更好地记录和管理他们的日常生活。
 
 ## 你的能力：
@@ -114,17 +108,30 @@ class _AiChatScreenState extends State<AiChatScreen> {
 2. **写作建议**：当用户不知道如何记录时，提供写作灵感和建议
 3. **心情陪伴**：倾听用户的烦恼，提供情感支持和积极建议
 4. **生活助手**：回答日常问题，提供生活小贴士
-5. **数据整理**：帮助用户整理和回顾过去的日记内容
+5. **数据查询**：通过工具函数查询用户的日记数据
 
-## 你可以访问的数据（用户已授权）：
-- **本月日记**：当前月份的所有日记记录
-- **最近 N 天**：获取最近几天的日记（如"最近7天"、"最近30天"）
-- **日期范围**：获取指定日期范围的日记（如"3月1日到3月15日"）
-- **心情筛选**：按心情筛选日记（如"开心的日子"、"难过的时候"）
-- **关键词搜索**：搜索包含特定关键词的日记（如"旅行"、"工作"）
-- **心情统计**：统计一段时间的心情分布（如"最近一周心情如何"）
-- **饮食统计**：统计饮食记录情况（如"最近吃了什么"）
-- **去年今天**：查看去年今天的日记（"去年今天我在做什么"）
+## 你可以使用的数据查询工具：
+- **getCurrentMonthDiaries**：获取当前月份的所有日记
+- **getRecentDiaries**：获取最近N天的日记（参数：days，必填）
+- **getDiariesByDateRange**：获取指定日期范围的日记（参数：startDate, endDate，格式yyyy-MM-dd，**两个参数都必须填写**）
+- **getDiariesByMood**：按心情筛选日记（参数：mood，如"开心"、"难过"）
+- **searchDiaries**：按关键词搜索日记（参数：keyword）
+- **getMoodStats**：统计最近N天的心情分布（参数：days，必填）
+- **getDietStats**：统计最近N天的饮食记录（参数：days，必填）
+- **getDiaryOnSameDayLastYear**：获取去年今天的日记
+- **getCurrentTime**：获取当前本地时间（无需参数）
+
+**参数填写规则**：
+- 所有标记"必填"的参数必须提供具体值
+- 日期格式必须是 yyyy-MM-dd（如 2024-03-27）
+- 如果用户说"最近三个月"，你要先计算出具体日期再调用
+
+## 使用说明：
+- 当用户询问日记相关内容时，自动调用合适的工具获取数据
+- **重要**：调用工具时必须提供所有必需的参数，不能留空
+- 例如查询日期范围时，必须计算出具体的 startDate 和 endDate（格式：yyyy-MM-dd）
+- 获取数据后，基于数据生成有帮助的回复
+- 如果用户未授权数据访问，告知用户需要在设置中开启权限
 
 ## 你的性格：
 - 友好、温暖、有耐心
@@ -137,17 +144,10 @@ class _AiChatScreenState extends State<AiChatScreen> {
 - 适当使用 emoji 增加亲和力
 - 重要信息可以分段列出
 
-## 当前可访问的数据：
-${diaryContext.isNotEmpty ? diaryContext : '用户未授权访问日记数据，或本月暂无日记记录'}
-
 现在，请以一个温暖的日记助手的身份，开始帮助用户吧！''';
 
       // 构建消息历史
       final List<Map<String, String>> messageHistory = [
-        {
-          'role': 'system',
-          'content': systemPrompt
-        },
         ..._messages.take(_messages.length - 1).map((msg) => {
           'role': msg.isUser ? 'user' : 'assistant',
           'content': msg.content,
@@ -155,8 +155,11 @@ ${diaryContext.isNotEmpty ? diaryContext : '用户未授权访问日记数据，
         {'role': 'user', 'content': message},
       ];
 
-      // 调用真实的 AI 流式 API
-      await for (final chunk in _aiService.chatStream(messageHistory)) {
+      // 使用 Function Calling 调用 AI
+      await for (final chunk in _aiService.chatStreamWithFunctions(
+        messageHistory,
+        systemPrompt: systemPrompt,
+      )) {
         setState(() {
           aiMessage.content += chunk;
         });

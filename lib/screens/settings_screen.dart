@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../services/theme_service.dart' show ThemeService, ImageStorageMode, ThemeModeType;
 import '../services/storage_service.dart';
+import '../services/notification_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -670,6 +671,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 16),
 
+          // 通知测试
+          Card(
+            child: Column(
+              children: [
+                ListTile(
+                  leading: Icon(
+                    Icons.notifications,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  title: const Text('测试通知'),
+                  subtitle: const Text('发送一条测试通知'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: _testNotification,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
           // 清除数据
           Card(
             child: Column(
@@ -796,5 +816,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _testNotification() async {
+    final notificationService = NotificationService();
+    await notificationService.showDiaryReminder();
+    
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('测试通知已发送')),
+      );
+    }
   }
 }

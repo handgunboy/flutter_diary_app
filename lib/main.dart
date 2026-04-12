@@ -5,6 +5,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'screens/home_screen.dart';
 import 'services/theme_service.dart';
 import 'services/storage_service.dart';
+import 'services/notification_service.dart';
 
 void main() async {
   // 确保 Flutter 绑定初始化
@@ -20,6 +21,10 @@ void main() async {
   // 清理超过30天的已删除日记
   final storageService = StorageService();
   await storageService.cleanupOldDeletedEntries();
+
+  // 初始化通知服务
+  final notificationService = NotificationService();
+  await notificationService.initialize();
 
   runApp(const MyApp());
 }
