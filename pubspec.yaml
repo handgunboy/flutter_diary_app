@@ -28,6 +28,8 @@ dependencies:
   google_fonts: ^6.1.0
   # 图片查看器
   photo_view: ^0.15.0
+  # 视频播放器
+  video_player: ^2.8.2
   # 文件选择器（用于导入导出）
   file_picker: ^8.0.0+1
   # 路径提供者

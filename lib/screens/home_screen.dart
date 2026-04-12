@@ -964,8 +964,8 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     }
 
-    // 按日期倒序排列
-    daysWithEntries.sort((a, b) => b.compareTo(a));
+    // 按日期正序排列（从早到晚）
+    daysWithEntries.sort((a, b) => a.compareTo(b));
     return daysWithEntries;
   }
 

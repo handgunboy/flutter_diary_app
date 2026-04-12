@@ -9,6 +9,7 @@ class DiaryEntry {
   final String? snacks;
   final String? mood;
   final String? weather;
+  final String? weight;
   final List<String> images;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -26,6 +27,7 @@ class DiaryEntry {
     this.snacks,
     this.mood,
     this.weather,
+    this.weight,
     this.images = const [],
     required this.createdAt,
     required this.updatedAt,
@@ -45,6 +47,7 @@ class DiaryEntry {
       'snacks': snacks,
       'mood': mood,
       'weather': weather,
+      'weight': weight,
       'images': images,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
@@ -65,6 +68,7 @@ class DiaryEntry {
       snacks: json['snacks'],
       mood: json['mood'],
       weather: json['weather'],
+      weight: json['weight'],
       images: List<String>.from(json['images'] ?? []),
       createdAt: DateTime.parse(json['createdAt']),
       updatedAt: DateTime.parse(json['updatedAt']),
@@ -84,6 +88,7 @@ class DiaryEntry {
     String? snacks,
     String? mood,
     String? weather,
+    String? weight,
     List<String>? images,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -101,6 +106,7 @@ class DiaryEntry {
       snacks: snacks ?? this.snacks,
       mood: mood ?? this.mood,
       weather: weather ?? this.weather,
+      weight: weight ?? this.weight,
       images: images ?? this.images,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,

@@ -31,6 +31,7 @@ class AiService {
 - snacks: 零食/其他
 - mood: 心情（如：开心、平静、焦虑等）
 - weather: 天气（如：晴天、多云、下雨等）
+- weight: 体重（如：60.5，数字即可）
 - content: 日记详细内容（将总结扩展成完整日记）
 
 只返回JSON，不要返回其他文字说明。格式示例：
@@ -41,6 +42,7 @@ class AiService {
   "snacks": null,
   "mood": "开心",
   "weather": "晴天",
+  "weight": "60.5",
   "content": "今天天气很好..."
 }
 ''';

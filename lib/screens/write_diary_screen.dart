@@ -35,6 +35,7 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
   final _snacksController = TextEditingController();
   final _moodController = TextEditingController();
   final _weatherController = TextEditingController();
+  final _weightController = TextEditingController();
   final _summaryController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
@@ -50,6 +51,7 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
   String _initialSnacks = '';
   String _initialMood = '';
   String _initialWeather = '';
+  String _initialWeight = '';
   List<String> _initialImages = [];
 
   @override
@@ -63,6 +65,7 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
       _snacksController.text = widget.existingEntry!.snacks ?? '';
       _moodController.text = widget.existingEntry!.mood ?? '';
       _weatherController.text = widget.existingEntry!.weather ?? '';
+      _weightController.text = widget.existingEntry!.weight ?? '';
       _images = List<String>.from(widget.existingEntry!.images);
       
       // 保存初始状态
@@ -73,6 +76,7 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
       _initialSnacks = widget.existingEntry!.snacks ?? '';
       _initialMood = widget.existingEntry!.mood ?? '';
       _initialWeather = widget.existingEntry!.weather ?? '';
+      _initialWeight = widget.existingEntry!.weight ?? '';
       _initialImages = List<String>.from(widget.existingEntry!.images);
     }
   }
@@ -86,6 +90,7 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
     _snacksController.dispose();
     _moodController.dispose();
     _weatherController.dispose();
+    _weightController.dispose();
     _summaryController.dispose();
     super.dispose();
   }
@@ -126,6 +131,9 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
           if (result['weather'] != null) {
             _weatherController.text = result['weather'];
           }
+          if (result['weight'] != null) {
+            _weightController.text = result['weight'];
+          }
           if (result['content'] != null) {
             _contentController.text = result['content'];
           }
@@ -149,7 +157,9 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
   Future<void> _pickImages() async {
     try {
       final ImagePicker picker = ImagePicker();
-      final List<XFile> images = await picker.pickMultiImage();
+      final List<XFile> images = await picker.pickMultiImage(
+        imageQuality: 85,
+      );
 
       if (images.isNotEmpty) {
         final storageMode = _themeService.imageStorageMode;
@@ -401,6 +411,7 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
              _snacksController.text.trim().isNotEmpty ||
              _moodController.text.trim().isNotEmpty ||
              _weatherController.text.trim().isNotEmpty ||
+             _weightController.text.trim().isNotEmpty ||
              _images.isNotEmpty;
     } else {
       // 编辑日记，检查是否有变更
@@ -411,6 +422,7 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
              _snacksController.text != _initialSnacks ||
              _moodController.text != _initialMood ||
              _weatherController.text != _initialWeather ||
+             _weightController.text != _initialWeight ||
              !_listEquals(_images, _initialImages);
     }
   }
@@ -478,6 +490,7 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
         snacks: _snacksController.text.trim().isEmpty ? null : _snacksController.text.trim(),
         mood: _moodController.text.trim().isEmpty ? null : _moodController.text.trim(),
         weather: _weatherController.text.trim().isEmpty ? null : _weatherController.text.trim(),
+        weight: _weightController.text.trim().isEmpty ? null : _weightController.text.trim(),
         images: _images,
         createdAt: widget.existingEntry?.createdAt ?? now,
         updatedAt: now,
@@ -534,7 +547,7 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
                       children: [
                         Icon(Icons.add_photo_alternate, size: 14, color: Colors.grey[600]),
                         const SizedBox(width: 4),
-                        Text('添加', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                        Text('添加照片', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
                       ],
                     ),
                   ),
@@ -544,12 +557,21 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
             if (_images.isNotEmpty) ...[
               const SizedBox(height: 8),
               SizedBox(
-                height: 80,
-                child: ListView.builder(
+                height: 100,
+                child: ReorderableListView.builder(
                   scrollDirection: Axis.horizontal,
                   itemCount: _images.length,
                   itemBuilder: (context, index) {
                     return _buildImageThumbnail(index);
+                  },
+                  onReorder: (oldIndex, newIndex) {
+                    setState(() {
+                      if (newIndex > oldIndex) {
+                        newIndex -= 1;
+                      }
+                      final item = _images.removeAt(oldIndex);
+                      _images.insert(newIndex, item);
+                    });
                   },
                 ),
               ),
@@ -560,69 +582,69 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
     );
   }
 
-  void _showFullScreenImage(int initialIndex) {
-    Navigator.push(
+  void _showFullScreenImage(int initialIndex) async {
+    final result = await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => ImageGalleryScreen(
           images: _images,
           initialIndex: initialIndex,
+          onDelete: (index) {
+            // 实时更新缩略图
+            setState(() {
+              _images.removeAt(index);
+            });
+          },
         ),
       ),
     );
+    
+    // 如果返回了删除信息，确保状态已更新
+    if (result != null && result is Map && result.containsKey('deletedIndex')) {
+      final deletedIndex = result['deletedIndex'] as int;
+      if (!_images.contains(result['deletedPath'])) {
+        // 已经通过 onDelete 回调删除了
+      }
+    }
   }
 
   Widget _buildImageThumbnail(int index) {
-    return Stack(
-      children: [
-        GestureDetector(
-          onTap: () => _showFullScreenImage(index),
-          child: Hero(
-            tag: 'image_$index',
-            child: Container(
-              width: 100,
-              height: 100,
-              margin: const EdgeInsets.only(right: 8),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.grey[400]!),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Image.file(
-                  File(_images[index]),
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    return Container(
-                      color: Colors.grey[200],
-                      child: Icon(Icons.broken_image, color: Colors.grey[500]),
-                    );
-                  },
+    final path = _images[index];
+
+    return Container(
+      key: ValueKey(path),
+      margin: const EdgeInsets.only(right: 8),
+      child: Stack(
+        children: [
+          GestureDetector(
+            onTap: () => _showFullScreenImage(index),
+            child: Hero(
+              tag: 'image_$index',
+              child: Container(
+                width: 100,
+                height: 100,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey[400]!),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.file(
+                    File(path),
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        color: Colors.grey[200],
+                        child: Icon(Icons.broken_image, color: Colors.grey[500]),
+                      );
+                    },
+                  ),
                 ),
               ),
             ),
           ),
-        ),
-        Positioned(
-          top: 4,
-          right: 12,
-          child: GestureDetector(
-            onTap: () => _removeImage(index),
-            child: Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: Colors.grey[700],
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(
-                Icons.close,
-                size: 14,
-                color: Colors.white,
-              ),
-            ),
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -633,47 +655,25 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Icon(Icons.restaurant, size: 18, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7)),
-                const SizedBox(width: 6),
-                Text(
-                  '今天吃了啥',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: Theme.of(context).colorScheme.onSurface,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
             _buildMealInput(
               controller: _breakfastController,
               label: '早餐',
               icon: Icons.wb_sunny_outlined,
               hint: '豆浆、油条',
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             _buildMealInput(
               controller: _lunchController,
               label: '午餐',
               icon: Icons.wb_sunny,
               hint: '红烧肉、米饭',
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             _buildMealInput(
               controller: _dinnerController,
               label: '晚餐',
               icon: Icons.nights_stay_outlined,
               hint: '蔬菜沙拉',
-            ),
-            const SizedBox(height: 8),
-            _buildMealInput(
-              controller: _snacksController,
-              label: '零食',
-              icon: Icons.cookie_outlined,
-              hint: '薯片、奶茶',
             ),
           ],
         ),
@@ -815,21 +815,6 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Icon(Icons.sentiment_satisfied, size: 18, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7)),
-                const SizedBox(width: 6),
-                Text(
-                  '心情 & 天气',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: Theme.of(context).colorScheme.onSurface,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
             TextFormField(
               controller: _moodController,
               style: const TextStyle(fontSize: 13),
@@ -841,7 +826,7 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
                 isDense: true,
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             TextFormField(
               controller: _weatherController,
               style: const TextStyle(fontSize: 13),
@@ -849,6 +834,20 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
                 labelText: '天气',
                 hintText: '晴天',
                 prefixIcon: Icon(Icons.wb_sunny, size: 18),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 6),
+            TextFormField(
+              controller: _weightController,
+              style: const TextStyle(fontSize: 13),
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(
+                labelText: '体重',
+                hintText: '60.5',
+                prefixIcon: Icon(Icons.monitor_weight, size: 18),
+                suffixText: 'kg',
                 contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                 isDense: true,
               ),
@@ -864,61 +863,55 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
   Widget _buildContentSection() {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 只保留 icon，去掉文字
-            Icon(Icons.edit_note, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7)),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _contentController,
-              decoration: InputDecoration(
-                hintText: '记录今天的故事...',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                alignLabelWithHint: true,
-              ),
-              maxLines: 10,
-              minLines: 5,
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return '请填写日记内容';
-                }
-                return null;
-              },
-              onTap: () {
-                // 首次点击且内容为空时，添加当前时间
-                if (_contentController.text.isEmpty) {
-                  final now = DateTime.now();
-                  final timeStr = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
-                  _contentController.text = '$timeStr ';
-                  _lastValue = _contentController.text;
-                  // 将光标移到末尾
-                  _contentController.selection = TextSelection.fromPosition(
-                    TextPosition(offset: _contentController.text.length),
-                  );
-                }
-              },
-              onChanged: (value) {
-                // 检测是否刚输入了换行符（通过比较上次值和当前值）
-                if (_lastValue != null && 
-                    value.length > _lastValue!.length &&
-                    value.endsWith('\n')) {
-                  final now = DateTime.now();
-                  final timeStr = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
-                  // 在换行后添加时间
-                  _contentController.text = '$value$timeStr ';
-                  // 将光标移到末尾
-                  _contentController.selection = TextSelection.fromPosition(
-                    TextPosition(offset: _contentController.text.length),
-                  );
-                }
-                _lastValue = _contentController.text;
-              },
+        padding: const EdgeInsets.all(12),
+        child: TextFormField(
+          controller: _contentController,
+          decoration: InputDecoration(
+            hintText: '记录今天的故事...',
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
             ),
-          ],
+            alignLabelWithHint: true,
+            contentPadding: const EdgeInsets.all(12),
+          ),
+          maxLines: null,
+          expands: true,
+          textAlignVertical: TextAlignVertical.top,
+          validator: (value) {
+            if (value == null || value.trim().isEmpty) {
+              return '请填写日记内容';
+            }
+            return null;
+          },
+          onTap: () {
+            // 首次点击且内容为空时，添加当前时间
+            if (_contentController.text.isEmpty) {
+              final now = DateTime.now();
+              final timeStr = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+              _contentController.text = '$timeStr ';
+              _lastValue = _contentController.text;
+              // 将光标移到末尾
+              _contentController.selection = TextSelection.fromPosition(
+                TextPosition(offset: _contentController.text.length),
+              );
+            }
+          },
+          onChanged: (value) {
+            // 检测是否刚输入了换行符（通过比较上次值和当前值）
+            if (_lastValue != null && 
+                value.length > _lastValue!.length &&
+                value.endsWith('\n')) {
+              final now = DateTime.now();
+              final timeStr = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+              // 在换行后添加时间
+              _contentController.text = '$value$timeStr ';
+              // 将光标移到末尾
+              _contentController.selection = TextSelection.fromPosition(
+                TextPosition(offset: _contentController.text.length),
+              );
+            }
+            _lastValue = _contentController.text;
+          },
         ),
       ),
     );
@@ -929,11 +922,10 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Text(
-        '创建于: ${DateFormat('yyyy-MM-dd HH:mm').format(widget.existingEntry!.createdAt)}\n'
-        '最后修改: ${DateFormat('yyyy-MM-dd HH:mm').format(widget.existingEntry!.updatedAt)}',
+        '创建于 ${DateFormat('yyyy/MM/dd HH:mm:ss').format(widget.existingEntry!.createdAt)}  修改于 ${DateFormat('yyyy/MM/dd HH:mm:ss').format(widget.existingEntry!.updatedAt)}',
         style: TextStyle(
-          fontSize: 12,
-          color: Colors.grey[600],
+          fontSize: 11,
+          color: Colors.grey[500],
         ),
         textAlign: TextAlign.center,
       ),
@@ -950,34 +942,46 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
             children: [
               _buildAppBar(),
               Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.all(16),
+                child: Column(
                   children: [
-                    const SizedBox(height: 16),
-                    // 第一行：照片（单独一行，最上面）
-                    _buildImageSection(),
-                    const SizedBox(height: 16),
-                    // 第二行：今天吃了啥（左）+ 心情天气（右）
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // 左侧：今天吃了啥
-                        Expanded(
-                          child: _buildMealSection(),
-                        ),
-                        const SizedBox(width: 12),
-                        // 右侧：心情天气
-                        Expanded(
-                          child: _buildMoodAndWeatherSectionCompact(),
-                        ),
-                      ],
+                    // 上面卡片区域（固定高度，不挤压）
+                    SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                      child: Column(
+                        children: [
+                          const SizedBox(height: 4),
+                          // 第一行：今天吃了啥（左）+ 心情天气（右）
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // 左侧：今天吃了啥
+                              Expanded(
+                                child: _buildMealSection(),
+                              ),
+                              const SizedBox(width: 12),
+                              // 右侧：心情天气
+                              Expanded(
+                                child: _buildMoodAndWeatherSectionCompact(),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          // 第二行：照片（全宽）
+                          _buildImageSection(),
+                          const SizedBox(height: 16),
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: 16),
-                    // 第三行：内容
-                    _buildContentSection(),
-                    const SizedBox(height: 24),
+                    // 第三行：内容（填充剩余高度）
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                        child: _buildContentSection(),
+                      ),
+                    ),
+                    // 时间戳
                     _buildTimestampSection(),
-                    const SizedBox(height: 32),
+                    const SizedBox(height: 8),
                   ],
                 ),
               ),
