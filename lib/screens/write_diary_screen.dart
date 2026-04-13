@@ -38,6 +38,7 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
   final _weightController = TextEditingController();
   final _summaryController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+  final _contentFieldKey = GlobalKey();
   bool _isLoading = false;
   bool _isAiParsing = false;
 
@@ -860,58 +861,160 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
 
   String? _lastValue;
 
+  // 显示全屏日记编辑对话框
+  void _showFullScreenEditor() async {
+    // 首次点击且内容为空时，添加当前时间
+    if (_contentController.text.isEmpty) {
+      final now = DateTime.now();
+      final timeStr = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+      _contentController.text = '$timeStr ';
+      _lastValue = _contentController.text;
+    }
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => _buildFullScreenEditor(),
+      ),
+    );
+  }
+
+  // 构建全屏编辑器
+  Widget _buildFullScreenEditor() {
+    return Scaffold(
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      resizeToAvoidBottomInset: true,
+      appBar: AppBar(
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        elevation: 0,
+        leading: TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+        title: const Text(
+          '编辑日记',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        centerTitle: true,
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('完成'),
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          // 编辑区域 - 从底部开始显示
+          Expanded(
+            child: SingleChildScrollView(
+              reverse: true, // 从底部开始显示
+              padding: const EdgeInsets.all(16),
+              child: TextFormField(
+                controller: _contentController,
+                autofocus: true,
+                decoration: InputDecoration(
+                  hintText: '记录今天的故事...',
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.all(12),
+                ),
+                maxLines: null,
+                keyboardType: TextInputType.multiline,
+                textAlignVertical: TextAlignVertical.bottom, // 从底部对齐
+                onChanged: (value) {
+                  // 检测是否刚输入了换行符（通过比较上次值和当前值）
+                  if (_lastValue != null && 
+                      value.length > _lastValue!.length &&
+                      value.endsWith('\n')) {
+                    final now = DateTime.now();
+                    final timeStr = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+                    // 在换行后添加时间
+                    _contentController.text = '$value$timeStr ';
+                    // 将光标移到末尾
+                    _contentController.selection = TextSelection.fromPosition(
+                      TextPosition(offset: _contentController.text.length),
+                    );
+                  }
+                  _lastValue = _contentController.text;
+                },
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildContentSection() {
     return Card(
+      key: _contentFieldKey,
       child: Padding(
         padding: const EdgeInsets.all(12),
-        child: TextFormField(
-          controller: _contentController,
-          decoration: InputDecoration(
-            hintText: '记录今天的故事...',
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
+        child: SizedBox.expand(
+          child: TextFormField(
+            controller: _contentController,
+            decoration: InputDecoration(
+              hintText: '记录今天的故事...',
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              alignLabelWithHint: true,
+              contentPadding: const EdgeInsets.all(12),
             ),
-            alignLabelWithHint: true,
-            contentPadding: const EdgeInsets.all(12),
-          ),
-          maxLines: null,
-          expands: true,
-          textAlignVertical: TextAlignVertical.top,
-          validator: (value) {
-            if (value == null || value.trim().isEmpty) {
-              return '请填写日记内容';
-            }
-            return null;
-          },
-          onTap: () {
-            // 首次点击且内容为空时，添加当前时间
-            if (_contentController.text.isEmpty) {
-              final now = DateTime.now();
-              final timeStr = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
-              _contentController.text = '$timeStr ';
+            maxLines: null,
+            expands: true,
+            textAlignVertical: TextAlignVertical.top,
+            validator: (value) {
+              if (value == null || value.trim().isEmpty) {
+                return '请填写日记内容';
+              }
+              return null;
+            },
+            onTap: () {
+              // 延迟滚动到底部，确保键盘弹出后输入框底部可见
+              Future.delayed(const Duration(milliseconds: 300), () {
+                if (_contentFieldKey.currentContext != null) {
+                  Scrollable.ensureVisible(
+                    _contentFieldKey.currentContext!,
+                    duration: const Duration(milliseconds: 200),
+                    curve: Curves.easeOut,
+                    alignment: 1.0, // 1.0 表示滚动到视口底部
+                  );
+                }
+              });
+              
+              // 首次点击且内容为空时，添加当前时间
+              if (_contentController.text.isEmpty) {
+                final now = DateTime.now();
+                final timeStr = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+                _contentController.text = '$timeStr ';
+                _lastValue = _contentController.text;
+                // 将光标移到末尾
+                _contentController.selection = TextSelection.fromPosition(
+                  TextPosition(offset: _contentController.text.length),
+                );
+              }
+            },
+            onChanged: (value) {
+              // 检测是否刚输入了换行符（通过比较上次值和当前值）
+              if (_lastValue != null && 
+                  value.length > _lastValue!.length &&
+                  value.endsWith('\n')) {
+                final now = DateTime.now();
+                final timeStr = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+                // 在换行后添加时间
+                _contentController.text = '$value$timeStr ';
+                // 将光标移到末尾
+                _contentController.selection = TextSelection.fromPosition(
+                  TextPosition(offset: _contentController.text.length),
+                );
+              }
               _lastValue = _contentController.text;
-              // 将光标移到末尾
-              _contentController.selection = TextSelection.fromPosition(
-                TextPosition(offset: _contentController.text.length),
-              );
-            }
-          },
-          onChanged: (value) {
-            // 检测是否刚输入了换行符（通过比较上次值和当前值）
-            if (_lastValue != null && 
-                value.length > _lastValue!.length &&
-                value.endsWith('\n')) {
-              final now = DateTime.now();
-              final timeStr = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
-              // 在换行后添加时间
-              _contentController.text = '$value$timeStr ';
-              // 将光标移到末尾
-              _contentController.selection = TextSelection.fromPosition(
-                TextPosition(offset: _contentController.text.length),
-              );
-            }
-            _lastValue = _contentController.text;
-          },
+            },
+          ),
         ),
       ),
     );
@@ -935,57 +1038,41 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       body: SafeArea(
         child: Form(
           key: _formKey,
-          child: Column(
-            children: [
-              _buildAppBar(),
-              Expanded(
-                child: Column(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildAppBar(),
+                const SizedBox(height: 4),
+                // 第一行：今天吃了啥（左）+ 心情天气（右）
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // 上面卡片区域（固定高度，不挤压）
-                    SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                      child: Column(
-                        children: [
-                          const SizedBox(height: 4),
-                          // 第一行：今天吃了啥（左）+ 心情天气（右）
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // 左侧：今天吃了啥
-                              Expanded(
-                                child: _buildMealSection(),
-                              ),
-                              const SizedBox(width: 12),
-                              // 右侧：心情天气
-                              Expanded(
-                                child: _buildMoodAndWeatherSectionCompact(),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          // 第二行：照片（全宽）
-                          _buildImageSection(),
-                          const SizedBox(height: 16),
-                        ],
-                      ),
-                    ),
-                    // 第三行：内容（填充剩余高度）
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                        child: _buildContentSection(),
-                      ),
-                    ),
-                    // 时间戳
-                    _buildTimestampSection(),
-                    const SizedBox(height: 8),
+                    Expanded(child: _buildMealSection()),
+                    const SizedBox(width: 12),
+                    Expanded(child: _buildMoodAndWeatherSectionCompact()),
                   ],
                 ),
-              ),
-            ],
+                const SizedBox(height: 12),
+                // 第二行：照片（全宽）
+                _buildImageSection(),
+                const SizedBox(height: 16),
+                // 日记内容区域（固定高度）
+                SizedBox(
+                  height: MediaQuery.of(context).size.height * 0.30,
+                  child: _buildContentSection(),
+                ),
+                const SizedBox(height: 8),
+                // 时间戳
+                _buildTimestampSection(),
+              ],
+            ),
           ),
         ),
       ),
