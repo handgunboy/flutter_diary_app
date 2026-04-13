@@ -44,6 +44,12 @@ dependencies:
   flutter_local_notifications: ^18.0.1
   # 时区支持（用于定时通知）
   timezone: ^0.10.0
+  # LangChain Dart 用于 AI 功能增强
+  langchain: ^0.7.7+2
+  langchain_openai: ^0.7.3+1
+  # 持久化数据库（用于向量存储）
+  sembast: ^3.8.4
+  path: ^1.9.0
 
 dev_dependencies:
   flutter_test:

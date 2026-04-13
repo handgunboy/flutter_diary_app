@@ -358,6 +358,7 @@ class DiaryCard extends StatelessWidget {
   final VoidCallback onToggleFavorite;
   final VoidCallback onDelete;
   final bool showDate;
+  final String searchQuery;
 
   const DiaryCard({
     super.key,
@@ -366,6 +367,7 @@ class DiaryCard extends StatelessWidget {
     required this.onToggleFavorite,
     required this.onDelete,
     this.showDate = false,
+    this.searchQuery = '',
   });
 
   @override
@@ -414,14 +416,10 @@ class DiaryCard extends StatelessWidget {
                   padding: const EdgeInsets.only(bottom: 8),
                   child: _buildMealInfo(entry),
                 ),
-              Text(
+              _buildHighlightedText(
                 entry.content,
+                searchQuery,
                 maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: Colors.grey[700],
-                  height: 1.4,
-                ),
               ),
               if (entry.images.isNotEmpty) ...[
                 const SizedBox(height: 12),
@@ -453,13 +451,14 @@ class DiaryCard extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? Colors.grey[400] : Colors.grey[700];
     final borderColor = isDark ? Colors.grey[700] : Colors.grey[300];
-    
+    final isHighlighted = searchQuery.isNotEmpty && mood.toLowerCase().contains(searchQuery.toLowerCase());
+
     return Container(
       margin: const EdgeInsets.only(right: 8),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: borderColor!),
+        border: Border.all(color: isHighlighted ? Colors.red : borderColor!),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -468,7 +467,7 @@ class DiaryCard extends StatelessWidget {
             Icon(
               icon,
               size: 16,
-              color: textColor,
+              color: isHighlighted ? Colors.red : textColor,
             ),
             const SizedBox(width: 4),
           ],
@@ -476,8 +475,8 @@ class DiaryCard extends StatelessWidget {
             mood,
             style: TextStyle(
               fontSize: 12,
-              color: textColor,
-              fontWeight: FontWeight.w500,
+              color: isHighlighted ? Colors.red : textColor,
+              fontWeight: isHighlighted ? FontWeight.bold : FontWeight.w500,
             ),
           ),
         ],
@@ -490,13 +489,14 @@ class DiaryCard extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? Colors.grey[400] : Colors.grey[700];
     final borderColor = isDark ? Colors.grey[700] : Colors.grey[300];
-    
+    final isHighlighted = searchQuery.isNotEmpty && weather.toLowerCase().contains(searchQuery.toLowerCase());
+
     return Container(
       margin: const EdgeInsets.only(right: 8),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: borderColor!),
+        border: Border.all(color: isHighlighted ? Colors.red : borderColor!),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -505,7 +505,7 @@ class DiaryCard extends StatelessWidget {
             Icon(
               icon,
               size: 16,
-              color: textColor,
+              color: isHighlighted ? Colors.red : textColor,
             ),
             const SizedBox(width: 4),
           ],
@@ -513,8 +513,8 @@ class DiaryCard extends StatelessWidget {
             weather,
             style: TextStyle(
               fontSize: 12,
-              color: textColor,
-              fontWeight: FontWeight.w500,
+              color: isHighlighted ? Colors.red : textColor,
+              fontWeight: isHighlighted ? FontWeight.bold : FontWeight.w500,
             ),
           ),
         ],
@@ -537,6 +537,72 @@ class DiaryCard extends StatelessWidget {
           color: Colors.grey[700],
         ),
       ),
+    );
+  }
+
+  // 构建带高亮的文本
+  Widget _buildHighlightedText(String text, String query, {int maxLines = 3}) {
+    if (query.isEmpty) {
+      return Text(
+        text,
+        maxLines: maxLines,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: Colors.grey[700],
+          height: 1.4,
+        ),
+      );
+    }
+
+    final lowerText = text.toLowerCase();
+    final lowerQuery = query.toLowerCase();
+    final List<TextSpan> spans = [];
+    int start = 0;
+
+    while (true) {
+      final index = lowerText.indexOf(lowerQuery, start);
+      if (index == -1) {
+        // 添加剩余文本
+        if (start < text.length) {
+          spans.add(TextSpan(
+            text: text.substring(start),
+            style: TextStyle(
+              color: Colors.grey[700],
+              height: 1.4,
+            ),
+          ));
+        }
+        break;
+      }
+
+      // 添加高亮前的文本
+      if (index > start) {
+        spans.add(TextSpan(
+          text: text.substring(start, index),
+          style: TextStyle(
+            color: Colors.grey[700],
+            height: 1.4,
+          ),
+        ));
+      }
+
+      // 添加高亮文本
+      spans.add(TextSpan(
+        text: text.substring(index, index + query.length),
+        style: TextStyle(
+          color: Colors.red,
+          height: 1.4,
+          fontWeight: FontWeight.bold,
+        ),
+      ));
+
+      start = index + query.length;
+    }
+
+    return RichText(
+      maxLines: maxLines,
+      overflow: TextOverflow.ellipsis,
+      text: TextSpan(children: spans),
     );
   }
 

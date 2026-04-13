@@ -190,13 +190,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: () async {
-        if (_isSearching) {
+    return PopScope(
+      canPop: !_isSearching,
+      onPopInvoked: (didPop) {
+        if (!didPop && _isSearching) {
           _toggleSearch();
-          return false;
         }
-        return true;
       },
       child: Scaffold(
         key: _scaffoldKey,
@@ -281,6 +280,10 @@ class _HomeScreenState extends State<HomeScreen> {
                             setState(() {
                               _searchQuery = value;
                             });
+                          },
+                          onTapOutside: (_) {
+                            // 点击外部区域关闭搜索
+                            FocusScope.of(context).unfocus();
                           },
                         ),
                       ),
@@ -459,6 +462,7 @@ class _HomeScreenState extends State<HomeScreen> {
       },
       onDelete: () => _deleteEntry(entry),
       showDate: true,
+      searchQuery: _searchQuery,
     );
   }
 
@@ -470,6 +474,7 @@ class _HomeScreenState extends State<HomeScreen> {
         onNavigateToWriteDiary: _navigateToWriteDiary,
         onDeleteEntry: _deleteEntry,
         onToggleFavorite: _loadEntries,
+        searchQuery: _searchQuery,
       ),
     );
   }
@@ -1269,6 +1274,7 @@ class _DayPageContent extends StatefulWidget {
   final Function(DateTime?, DiaryEntry?) onNavigateToWriteDiary;
   final Function(DiaryEntry) onDeleteEntry;
   final Function() onToggleFavorite;
+  final String searchQuery;
 
   const _DayPageContent({
     required this.date,
@@ -1276,6 +1282,7 @@ class _DayPageContent extends StatefulWidget {
     required this.onNavigateToWriteDiary,
     required this.onDeleteEntry,
     required this.onToggleFavorite,
+    this.searchQuery = '',
   });
 
   @override
@@ -1395,6 +1402,7 @@ class _DayPageContentState extends State<_DayPageContent> {
         widget.onToggleFavorite();
       },
       onDelete: () => widget.onDeleteEntry(entry),
+      searchQuery: widget.searchQuery,
     );
   }
 

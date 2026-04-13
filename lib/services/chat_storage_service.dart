@@ -16,18 +16,22 @@ class ChatStorageService {
     await prefs.setString(_chatKey, jsonEncode(messagesJson));
   }
 
-  // 加载聊天记录
-  Future<List<ChatMessage>> loadMessages() async {
+  // 加载聊天记录，限制最多加载100条（避免性能问题）
+  Future<List<ChatMessage>> loadMessages({int limit = 100}) async {
     final prefs = await SharedPreferences.getInstance();
     final jsonString = prefs.getString(_chatKey);
-    
+
     if (jsonString == null || jsonString.isEmpty) {
       return [];
     }
 
     try {
       final List<dynamic> messagesJson = jsonDecode(jsonString);
-      return messagesJson.map((json) => ChatMessage(
+      // 只加载最近的消息
+      final startIndex = messagesJson.length > limit ? messagesJson.length - limit : 0;
+      final recentMessages = messagesJson.sublist(startIndex);
+
+      return recentMessages.map((json) => ChatMessage(
         content: json['content'],
         isUser: json['isUser'],
         timestamp: DateTime.parse(json['timestamp']),

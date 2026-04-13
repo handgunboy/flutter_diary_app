@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../services/ai_service.dart';
+import '../services/langchain_service.dart';
 import '../services/chat_storage_service.dart';
 import 'settings_screen.dart';
 
@@ -14,6 +15,7 @@ class AiChatScreen extends StatefulWidget {
 
 class _AiChatScreenState extends State<AiChatScreen> {
   final AiService _aiService = AiService();
+  final LangChainService _langChainService = LangChainService();
   final ChatStorageService _chatStorage = ChatStorageService();
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
@@ -21,6 +23,11 @@ class _AiChatScreenState extends State<AiChatScreen> {
   bool _isTyping = false;
   bool _isConfigured = false;
   bool _isLoading = true;
+  
+  // 聊天模式：false = 普通模式（Function Calling）, true = LangChain RAG 模式
+  bool _useLangChainRAG = false;
+  // 会话 ID（用于 LangChain 记忆）
+  final String _sessionId = 'default_session';
 
   @override
   void initState() {
@@ -35,8 +42,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
       _messages = messages;
       _isLoading = false;
     });
-    // 延迟滚动到底部
-    Future.delayed(const Duration(milliseconds: 100), _scrollToBottom);
+    // 列表已反转，最新消息在底部，无需滚动
   }
 
   Future<void> _saveMessages() async {
@@ -45,7 +51,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
 
   void _checkConfig() {
     setState(() {
-      _isConfigured = _aiService.isConfigured;
+      _isConfigured = _aiService.isConfigured || _langChainService.isConfigured;
     });
   }
 
@@ -58,8 +64,9 @@ class _AiChatScreenState extends State<AiChatScreen> {
 
   void _scrollToBottom() {
     if (_scrollController.hasClients) {
+      // 列表已反转，最新消息在底部（position 0）
       _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
+        0,
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeOut,
       );
@@ -100,8 +107,28 @@ class _AiChatScreenState extends State<AiChatScreen> {
     });
 
     try {
-      // 构建系统提示词（简化版，因为 Function Calling 会自动处理数据获取）
-      String systemPrompt = '''你是"小坡"，一款日记应用中的智能 AI 助手。你的主要职责是帮助用户更好地记录和管理他们的日常生活。
+      if (_useLangChainRAG) {
+        // 使用 LangChain RAG 模式（带记忆和向量检索）
+        await for (final chunk in _langChainService.chatWithRAG(
+          sessionId: _sessionId,
+          message: message,
+        )) {
+          setState(() {
+            aiMessage.content += chunk;
+          });
+          _scrollToBottom();
+        }
+      } else {
+        // 使用原 Function Calling 模式
+        // 获取当前时间
+        final now = DateTime.now();
+        final currentTimeStr = DateFormat('yyyy年MM月dd日 HH:mm').format(now);
+
+        // 构建系统提示词
+        String systemPrompt = '''你是"小坡"，一款日记应用中的智能 AI 助手。你的主要职责是帮助用户更好地记录和管理他们的日常生活。
+
+**当前时间：$currentTimeStr**
+**重要提示：你已经有当前时间了，当用户询问时间相关问题时，直接使用上面的时间回答，不要调用任何工具查询时间。**
 
 ## 你的能力：
 1. **日记分析**：帮助用户分析日记内容，提取关键信息（如饮食、心情、天气等）
@@ -119,7 +146,6 @@ class _AiChatScreenState extends State<AiChatScreen> {
 - **getMoodStats**：统计最近N天的心情分布（参数：days，必填）
 - **getDietStats**：统计最近N天的饮食记录（参数：days，必填）
 - **getDiaryOnSameDayLastYear**：获取去年今天的日记
-- **getCurrentTime**：获取当前本地时间（无需参数）
 
 **参数填写规则**：
 - 所有标记"必填"的参数必须提供具体值
@@ -130,6 +156,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
 - 当用户询问日记相关内容时，自动调用合适的工具获取数据
 - **重要**：调用工具时必须提供所有必需的参数，不能留空
 - 例如查询日期范围时，必须计算出具体的 startDate 和 endDate（格式：yyyy-MM-dd）
+- **特别重要**：系统已经提供了当前时间，你不需要也不应该调用工具来查询时间，直接回答用户即可
 - 获取数据后，基于数据生成有帮助的回复
 - 如果用户未授权数据访问，告知用户需要在设置中开启权限
 
@@ -146,24 +173,25 @@ class _AiChatScreenState extends State<AiChatScreen> {
 
 现在，请以一个温暖的日记助手的身份，开始帮助用户吧！''';
 
-      // 构建消息历史
-      final List<Map<String, String>> messageHistory = [
-        ..._messages.take(_messages.length - 1).map((msg) => {
-          'role': msg.isUser ? 'user' : 'assistant',
-          'content': msg.content,
-        }),
-        {'role': 'user', 'content': message},
-      ];
+        // 构建消息历史
+        final List<Map<String, String>> messageHistory = [
+          ..._messages.take(_messages.length - 1).map((msg) => {
+            'role': msg.isUser ? 'user' : 'assistant',
+            'content': msg.content,
+          }),
+          {'role': 'user', 'content': message},
+        ];
 
-      // 使用 Function Calling 调用 AI
-      await for (final chunk in _aiService.chatStreamWithFunctions(
-        messageHistory,
-        systemPrompt: systemPrompt,
-      )) {
-        setState(() {
-          aiMessage.content += chunk;
-        });
-        _scrollToBottom();
+        // 使用 Function Calling 调用 AI
+        await for (final chunk in _aiService.chatStreamWithFunctions(
+          messageHistory,
+          systemPrompt: systemPrompt,
+        )) {
+          setState(() {
+            aiMessage.content += chunk;
+          });
+          _scrollToBottom();
+        }
       }
 
       // 保存更新后的消息
@@ -230,6 +258,8 @@ class _AiChatScreenState extends State<AiChatScreen> {
 
     if (confirm == true) {
       await _chatStorage.clearMessages();
+      // 同时清除 LangChain 记忆
+      _langChainService.clearMemory(_sessionId);
       setState(() {
         _messages.clear();
       });
@@ -273,6 +303,30 @@ class _AiChatScreenState extends State<AiChatScreen> {
         backgroundColor: isDark ? theme.colorScheme.surface : theme.colorScheme.surface,
         foregroundColor: isDark ? theme.colorScheme.onSurface : theme.colorScheme.onSurface,
         actions: [
+          // 模式切换按钮
+          if (_isConfigured)
+            TextButton.icon(
+              onPressed: () {
+                setState(() {
+                  _useLangChainRAG = !_useLangChainRAG;
+                });
+                // 切换模式时清除 LangChain 记忆
+                if (_useLangChainRAG) {
+                  _langChainService.clearMemory(_sessionId);
+                }
+              },
+              icon: Icon(
+                _useLangChainRAG ? Icons.psychology : Icons.chat_bubble_outline,
+                size: 18,
+                color: _useLangChainRAG ? Colors.green : null,
+              ),
+              label: Text(
+                _useLangChainRAG ? 'RAG模式' : '普通模式',
+                style: TextStyle(
+                  color: _useLangChainRAG ? Colors.green : null,
+                ),
+              ),
+            ),
           if (_messages.isNotEmpty)
             IconButton(
               icon: const Icon(Icons.delete_outline),
@@ -307,9 +361,12 @@ class _AiChatScreenState extends State<AiChatScreen> {
                       : ListView.builder(
                           controller: _scrollController,
                           padding: const EdgeInsets.all(16),
+                          reverse: true,
                           itemCount: _messages.length,
                           itemBuilder: (context, index) {
-                            return _buildMessageItem(index);
+                            // 反转后，最新消息在底部（索引0）
+                            final reversedIndex = _messages.length - 1 - index;
+                            return _buildMessageItem(reversedIndex);
                           },
                         ),
                 ),

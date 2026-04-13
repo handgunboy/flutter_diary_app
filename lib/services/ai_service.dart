@@ -683,17 +683,6 @@ class AiService {
         },
       },
     },
-    {
-      'type': 'function',
-      'function': {
-        'name': 'getCurrentTime',
-        'description': '获取当前本地时间，包括日期、时间、星期等信息',
-        'parameters': {
-          'type': 'object',
-          'properties': {},
-        },
-      },
-    },
   ];
 
   /// 执行函数调用
@@ -768,17 +757,6 @@ class AiService {
           developer.log('📅 [_executeFunction] 获取去年今天日记', name: 'AiService');
           final result = await getDiaryOnSameDayLastYear();
           developer.log('✅ [_executeFunction] 去年今天日记获取完成, 长度: ${result.length}', name: 'AiService');
-          return result;
-          
-        case 'getCurrentTime':
-          developer.log('🕐 [_executeFunction] 获取当前时间', name: 'AiService');
-          final now = DateTime.now();
-          final weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
-          final weekday = weekdays[now.weekday - 1];
-          final result = '''当前时间：${DateFormat('yyyy年MM月dd日 HH:mm:ss').format(now)}
-星期：$weekday
-时间戳：${now.millisecondsSinceEpoch}''';          
-          developer.log('✅ [_executeFunction] 当前时间获取完成: $result', name: 'AiService');
           return result;
           
         default:
