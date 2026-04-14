@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'dart:io';
 import 'package:archive/archive.dart';
 import 'package:path_provider/path_provider.dart';
@@ -17,6 +18,13 @@ class StorageService {
   StorageService._internal();
 
   Future<SharedPreferences> get _prefs async => await SharedPreferences.getInstance();
+
+  Future<void> _saveAllEntries(List<DiaryEntry> entries, {SharedPreferences? prefs}) async {
+    final targetPrefs = prefs ?? await _prefs;
+    entries.sort((a, b) => b.date.compareTo(a.date));
+    final jsonList = entries.map((e) => e.toJson()).toList();
+    await targetPrefs.setString(_diaryKey, jsonEncode(jsonList));
+  }
 
   // 获取所有未删除的日记（正常列表）
   Future<List<DiaryEntry>> getAllEntries() async {
@@ -60,7 +68,7 @@ class StorageService {
 
   Future<void> saveEntry(DiaryEntry entry) async {
     final prefs = await _prefs;
-    final entries = await getAllEntries();
+    final entries = await _getAllEntriesIncludingDeleted();
     
     final index = entries.indexWhere((e) => e.id == entry.id);
     if (index >= 0) {
@@ -68,11 +76,8 @@ class StorageService {
     } else {
       entries.add(entry);
     }
-    
-    entries.sort((a, b) => b.date.compareTo(a.date));
-    
-    final jsonList = entries.map((e) => e.toJson()).toList();
-    await prefs.setString(_diaryKey, jsonEncode(jsonList));
+
+    await _saveAllEntries(entries, prefs: prefs);
   }
 
   // 软删除日记
@@ -85,9 +90,7 @@ class StorageService {
       entries[index] = entries[index].copyWith(
         deletedAt: DateTime.now(),
       );
-
-      final jsonList = entries.map((e) => e.toJson()).toList();
-      await prefs.setString(_diaryKey, jsonEncode(jsonList));
+      await _saveAllEntries(entries, prefs: prefs);
     }
   }
 
@@ -101,9 +104,7 @@ class StorageService {
       entries[index] = entries[index].copyWith(
         deletedAt: null,
       );
-
-      final jsonList = entries.map((e) => e.toJson()).toList();
-      await prefs.setString(_diaryKey, jsonEncode(jsonList));
+      await _saveAllEntries(entries, prefs: prefs);
     }
   }
 
@@ -113,9 +114,7 @@ class StorageService {
     final entries = await _getAllEntriesIncludingDeleted();
 
     entries.removeWhere((e) => e.id == id);
-
-    final jsonList = entries.map((e) => e.toJson()).toList();
-    await prefs.setString(_diaryKey, jsonEncode(jsonList));
+    await _saveAllEntries(entries, prefs: prefs);
   }
 
   // 清理超过30天的已删除日记
@@ -129,9 +128,7 @@ class StorageService {
       final daysSinceDeleted = now.difference(e.deletedAt!).inDays;
       return daysSinceDeleted >= 30;
     });
-
-    final jsonList = entries.map((e) => e.toJson()).toList();
-    await prefs.setString(_diaryKey, jsonEncode(jsonList));
+    await _saveAllEntries(entries, prefs: prefs);
   }
 
   Future<DiaryEntry?> getEntryByDate(DateTime date) async {
@@ -219,16 +216,14 @@ class StorageService {
 
   Future<void> toggleFavorite(String entryId) async {
     final prefs = await _prefs;
-    final entries = await getAllEntries();
+    final entries = await _getAllEntriesIncludingDeleted();
     
     final index = entries.indexWhere((e) => e.id == entryId);
     if (index >= 0) {
       entries[index] = entries[index].copyWith(
         isFavorite: !entries[index].isFavorite,
       );
-      
-      final jsonList = entries.map((e) => e.toJson()).toList();
-      await prefs.setString(_diaryKey, jsonEncode(jsonList));
+      await _saveAllEntries(entries, prefs: prefs);
     }
   }
 
@@ -261,7 +256,7 @@ class StorageService {
         await importedImagesDir.delete(recursive: true);
       }
     } catch (e) {
-      print('清除图片文件夹失败: $e');
+      developer.log('清除图片文件夹失败: $e', name: 'StorageService');
     }
   }
 
@@ -289,7 +284,7 @@ class StorageService {
       }
       return null;
     } catch (e) {
-      print('复制图片失败: $e');
+      developer.log('复制图片失败: $e', name: 'StorageService');
       return null;
     }
   }
@@ -344,7 +339,7 @@ class StorageService {
       
       return zipPath;
     } catch (e) {
-      print('导出数据失败: $e');
+      developer.log('导出数据失败: $e', name: 'StorageService');
       return null;
     }
   }
@@ -352,26 +347,26 @@ class StorageService {
   // 导入 ZIP 文件（包含数据和图片）
   Future<bool> importDataFromZip(String zipPath) async {
     try {
-      print('开始导入 ZIP: $zipPath');
+      developer.log('开始导入 ZIP: $zipPath', name: 'StorageService');
       
       final zipFile = File(zipPath);
       if (!await zipFile.exists()) {
-        print('ZIP 文件不存在');
+        developer.log('ZIP 文件不存在', name: 'StorageService');
         return false;
       }
       
       final bytes = await zipFile.readAsBytes();
-      print('ZIP 文件大小: ${bytes.length} bytes');
+      developer.log('ZIP 文件大小: ${bytes.length} bytes', name: 'StorageService');
       
       final archive = ZipDecoder().decodeBytes(bytes);
-      print('ZIP 包含 ${archive.length} 个文件');
+      developer.log('ZIP 包含 ${archive.length} 个文件', name: 'StorageService');
       
       // 找到数据文件
       ArchiveFile? dataFile;
       final List<ArchiveFile> imageFiles = [];
       
       for (var file in archive) {
-        print('ZIP 中的文件: ${file.name}');
+        developer.log('ZIP 中的文件: ${file.name}', name: 'StorageService');
         if (file.name == 'data.json') {
           dataFile = file;
         } else if (file.name.startsWith('images/')) {
@@ -380,11 +375,11 @@ class StorageService {
       }
       
       if (dataFile == null) {
-        print('未找到 data.json 文件');
+        developer.log('未找到 data.json 文件', name: 'StorageService');
         return false;
       }
       
-      print('找到 ${imageFiles.length} 张图片');
+      developer.log('找到 ${imageFiles.length} 张图片', name: 'StorageService');
       
       // 解析数据
       final jsonString = utf8.decode(dataFile.content);
@@ -427,7 +422,7 @@ class StorageService {
       // 导入数据
       return await importData(data);
     } catch (e) {
-      print('导入 ZIP 失败: $e');
+      developer.log('导入 ZIP 失败: $e', name: 'StorageService');
       return false;
     }
   }
@@ -439,12 +434,12 @@ class StorageService {
       
       // 验证数据格式
       if (!data.containsKey('entries')) {
-        print('导入失败：数据格式不正确，缺少 entries 字段');
+        developer.log('导入失败：数据格式不正确，缺少 entries 字段', name: 'StorageService');
         return false;
       }
       
       final List<dynamic> entriesJson = data['entries'];
-      print('正在导入 ${entriesJson.length} 条日记');
+      developer.log('正在导入 ${entriesJson.length} 条日记', name: 'StorageService');
       
       final List<DiaryEntry> newEntries = entriesJson
           .map((json) => DiaryEntry.fromJson(json))
@@ -461,18 +456,17 @@ class StorageService {
       for (var entry in newEntries) {
         entryMap[entry.id] = entry;
       }
-      
+
       // 保存合并后的数据
-      final jsonList = entryMap.values.map((e) => e.toJson()).toList();
-      await prefs.setString(_diaryKey, jsonEncode(jsonList));
+      await _saveAllEntries(entryMap.values.toList(), prefs: prefs);
       
       // 清除数据已清除标记，因为现在有数据了
       await prefs.remove(_dataClearedKey);
       
-      print('导入成功，共 ${entryMap.length} 条日记');
+      developer.log('导入成功，共 ${entryMap.length} 条日记', name: 'StorageService');
       return true;
     } catch (e) {
-      print('导入数据失败: $e');
+      developer.log('导入数据失败: $e', name: 'StorageService');
       return false;
     }
   }

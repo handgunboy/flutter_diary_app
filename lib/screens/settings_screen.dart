@@ -1,16 +1,11 @@
-import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:open_filex/open_filex.dart';
-import 'package:open_file_manager/open_file_manager.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../services/theme_service.dart' show ThemeService, ImageStorageMode, ThemeModeType;
 import '../services/storage_service.dart';
 import '../services/notification_service.dart';
+import '../widgets/app_top_toast.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -52,9 +47,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _saveAiPrompt() async {
     await _themeService.setAiPrompt(_aiPromptController.text.trim());
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('AI提示词已保存')),
-      );
+      AppTopToast.show(context, 'AI提示词已保存');
     }
   }
 
@@ -64,9 +57,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _aiApiKeyController.text.trim(),
     );
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('API配置已保存')),
-      );
+      AppTopToast.show(context, 'API配置已保存');
     }
   }
 
@@ -75,9 +66,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       // 显示进度提示
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('正在打包数据，请稍候...')),
-        );
+        AppTopToast.show(context, '正在打包数据，请稍候...');
       }
       
       final zipPath = await _storageService.exportDataWithImages();
@@ -90,71 +79,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
         
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: InkWell(
-                onTap: () async {
-                  // 尝试打开文件所在文件夹
-                  try {
-                    final directory = File(zipPath).parent.path;
-                    await openFileManager(
-                      androidConfig: AndroidConfig(
-                        folderType: AndroidFolderType.other,
-                        folderPath: directory,
-                      ),
-                    );
-                  } catch (e) {
-                    // 如果打开文件夹失败，复制路径到剪贴板
-                    await Clipboard.setData(ClipboardData(text: zipPath));
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('路径已复制到剪贴板'),
-                          duration: Duration(seconds: 2),
-                        ),
-                      );
-                    }
-                  }
-                },
-                child: Text(
-                  '数据已导出到: $zipPath\n点击打开文件夹',
-                  style: const TextStyle(
-                    decoration: TextDecoration.underline,
-                    color: Colors.yellow,
-                  ),
-                ),
-              ),
-              duration: const Duration(seconds: 8),
-              action: SnackBarAction(
-                label: '打开文件',
-                onPressed: () async {
-                  // 打开文件
-                  final file = File(zipPath);
-                  if (await file.exists()) {
-                    final result = await OpenFilex.open(zipPath);
-                    if (result.type != ResultType.done && mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('无法打开文件: ${result.message}')),
-                      );
-                    }
-                  }
-                },
-              ),
-            ),
-          );
+          AppTopToast.show(context, '导出成功，已唤起分享');
         }
       } else {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('导出失败')),
-          );
+          AppTopToast.show(context, '导出失败', isError: true);
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('导出失败: $e')),
-        );
+        AppTopToast.show(context, '导出失败: $e', isError: true);
       }
     }
   }
@@ -189,18 +123,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
         
         if (confirmed == true) {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('正在导入数据，请稍候...')),
-            );
+            AppTopToast.show(context, '正在导入数据，请稍候...');
           }
           
           final success = await _storageService.importDataFromZip(result.files.single.path!);
           
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(success ? '数据导入成功' : '数据导入失败'),
-              ),
+            AppTopToast.show(
+              context,
+              success ? '数据导入成功' : '数据导入失败',
+              isError: !success,
             );
             
             // 如果导入成功，返回 true 通知主页刷新
@@ -212,9 +144,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('导入失败: $e')),
-        );
+        AppTopToast.show(context, '导入失败: $e', isError: true);
       }
     }
   }
@@ -302,9 +232,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (confirm == true) {
       await _storageService.clearAllData();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('所有数据已清除')),
-        );
+        AppTopToast.show(context, '所有数据已清除');
         // 刷新页面状态
         setState(() {});
       }
@@ -845,9 +773,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await notificationService.showDiaryReminder();
     
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('测试通知已发送')),
-      );
+      AppTopToast.show(context, '测试通知已发送');
     }
   }
 }

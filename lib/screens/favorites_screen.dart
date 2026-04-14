@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import '../models/diary_entry.dart';
 import '../services/storage_service.dart';
+import '../widgets/app_top_toast.dart';
 import '../widgets/diary_card.dart';
 import 'write_diary_screen.dart';
 
@@ -52,9 +52,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
     await _storageService.toggleFavorite(entry.id);
     _loadFavorites();
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('已取消收藏')),
-      );
+      AppTopToast.show(context, '已取消收藏');
     }
   }
 

@@ -466,6 +466,29 @@ ${context.isNotEmpty && context != '没有找到相关的日记记录。' ? '以
     ];
   }
 
+  int _asInt(dynamic value, {int fallback = 7}) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value) ?? fallback;
+    return fallback;
+  }
+
+  Map<String, dynamic>? _tryParseToolArguments(String rawArguments) {
+    final trimmed = rawArguments.trim();
+    if (trimmed.isEmpty) {
+      return <String, dynamic>{};
+    }
+
+    final decoded = jsonDecode(trimmed);
+    if (decoded is Map<String, dynamic>) {
+      return decoded;
+    }
+    if (decoded is Map) {
+      return decoded.cast<String, dynamic>();
+    }
+    return null;
+  }
+
   /// 流式 Function Calling 实现
   Stream<String> _chatStreamWithFunctions(
     List<Map<String, dynamic>> messages,
@@ -507,6 +530,7 @@ ${context.isNotEmpty && context != '没有找到相关的日记记录。' ? '以
         StringBuffer buffer = StringBuffer();
         String? functionName;
         Map<String, dynamic>? functionArguments;
+        final StringBuffer functionArgumentsBuffer = StringBuffer();
         bool isCollectingFunction = false;
 
         await for (final chunk in response.stream.transform(utf8.decoder)) {
@@ -515,6 +539,17 @@ ${context.isNotEmpty && context != '没有找到相关的日记记录。' ? '以
             if (line.startsWith('data: ')) {
               final data = line.substring(6);
               if (data == '[DONE]') {
+                if (functionName != null && functionArguments == null) {
+                  try {
+                    functionArguments = _tryParseToolArguments(
+                      functionArgumentsBuffer.toString(),
+                    );
+                  } catch (_) {
+                    yield '\n查询数据时出错: 工具参数解析失败';
+                    return;
+                  }
+                }
+
                 // 检查是否有函数调用
                 if (functionName != null && functionArguments != null) {
                   yield '\n\n[正在查询数据...]\n';
@@ -522,12 +557,13 @@ ${context.isNotEmpty && context != '没有找到相关的日记记录。' ? '以
 
                   // 将结果发送给 AI 生成最终回复
                   final functionMessages = [...messages];
+                  final toolCallId = 'call_${DateTime.now().millisecondsSinceEpoch}';
                   functionMessages.add({
                     'role': 'assistant',
                     'content': null,
                     'tool_calls': [
                       {
-                        'id': 'call_${DateTime.now().millisecondsSinceEpoch}',
+                        'id': toolCallId,
                         'type': 'function',
                         'function': {
                           'name': functionName,
@@ -538,7 +574,7 @@ ${context.isNotEmpty && context != '没有找到相关的日记记录。' ? '以
                   });
                   functionMessages.add({
                     'role': 'tool',
-                    'tool_call_id': 'call_${DateTime.now().millisecondsSinceEpoch}',
+                    'tool_call_id': toolCallId,
                     'content': result,
                   });
 
@@ -560,12 +596,17 @@ ${context.isNotEmpty && context != '没有找到相关的日记记录。' ? '以
                     functionName = toolCall['function']['name'] ?? functionName;
                     final args = toolCall['function']['arguments'];
                     if (args != null && args is String) {
-                      if (functionArguments == null) {
-                        functionArguments = {};
+                      if (args.isNotEmpty) {
+                        functionArgumentsBuffer.write(args);
                       }
+
                       try {
-                        final parsed = jsonDecode(args);
-                        functionArguments.addAll(parsed as Map<String, dynamic>);
+                        final parsed = _tryParseToolArguments(
+                          functionArgumentsBuffer.toString(),
+                        );
+                        if (parsed != null) {
+                          functionArguments = parsed;
+                        }
                       } catch (e) {
                         // 参数可能不完整，继续收集
                       }
@@ -659,7 +700,7 @@ ${context.isNotEmpty && context != '没有找到相关的日记记录。' ? '以
         case 'getCurrentMonthDiaries':
           return await _getCurrentMonthDiaries();
         case 'getRecentDiaries':
-          final days = arguments['days'] as int? ?? 7;
+          final days = _asInt(arguments['days']);
           return await _getRecentDiaries(days);
         case 'getDiariesByDateRange':
           final startDate = DateTime.parse(arguments['startDate'] as String);
@@ -672,10 +713,10 @@ ${context.isNotEmpty && context != '没有找到相关的日记记录。' ? '以
           final keyword = arguments['keyword'] as String? ?? '';
           return await _searchDiaries(keyword);
         case 'getMoodStats':
-          final days = arguments['days'] as int? ?? 7;
+          final days = _asInt(arguments['days']);
           return await _getMoodStats(days);
         case 'getDietStats':
-          final days = arguments['days'] as int? ?? 7;
+          final days = _asInt(arguments['days']);
           return await _getDietStats(days);
         case 'getDiaryOnSameDayLastYear':
           return await _getDiaryOnSameDayLastYear();
@@ -686,37 +727,6 @@ ${context.isNotEmpty && context != '没有找到相关的日记记录。' ? '以
       developer.log('❌ 函数执行失败: $e', name: 'LangChainService');
       return '查询失败: $e';
     }
-  }
-
-  /// 获取或创建带上下文的 Agent
-  (ToolsAgent, AgentExecutor) _getOrCreateAgentWithContext(String sessionId, String context) {
-    final cacheKey = '${sessionId}_${_contextHash(context)}';
-
-    if (!_agents.containsKey(cacheKey)) {
-      final memory = ConversationBufferMemory(
-        returnMessages: true,
-        memoryKey: 'history',
-      );
-
-      final tools = _createDiaryTools();
-
-      final agent = ToolsAgent.fromLLMAndTools(
-        llm: _llm!,
-        tools: tools,
-        memory: memory,
-        systemChatMessage: _getSystemPromptTemplate(context),
-      );
-
-      final executor = AgentExecutor(agent: agent);
-
-      _agents[cacheKey] = (agent, executor);
-    }
-    return _agents[cacheKey]!;
-  }
-
-  /// 计算上下文哈希（用于缓存）
-  String _contextHash(String context) {
-    return context.isEmpty ? 'empty' : context.hashCode.toString();
   }
 
   // ========== 数据查询方法 ==========

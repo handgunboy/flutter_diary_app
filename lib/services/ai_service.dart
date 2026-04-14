@@ -1,11 +1,9 @@
 import 'dart:convert';
 import 'dart:developer' as developer;
-import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'theme_service.dart';
 import 'storage_service.dart';
-import '../models/diary_entry.dart';
 
 class AiService {
   final ThemeService _themeService = ThemeService();
@@ -685,6 +683,29 @@ class AiService {
     },
   ];
 
+  int _asInt(dynamic value, {int fallback = 7}) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value) ?? fallback;
+    return fallback;
+  }
+
+  Map<String, dynamic>? _tryParseToolArguments(String rawArguments) {
+    final trimmed = rawArguments.trim();
+    if (trimmed.isEmpty) {
+      return <String, dynamic>{};
+    }
+
+    final decoded = jsonDecode(trimmed);
+    if (decoded is Map<String, dynamic>) {
+      return decoded;
+    }
+    if (decoded is Map) {
+      return decoded.cast<String, dynamic>();
+    }
+    return null;
+  }
+
   /// 执行函数调用
   Future<String> _executeFunction(String functionName, Map<String, dynamic> arguments) async {
     developer.log('🎯 [_executeFunction] 执行函数: $functionName, 原始参数: $arguments', name: 'AiService');
@@ -698,7 +719,7 @@ class AiService {
           return result;
           
         case 'getRecentDiaries':
-          final days = arguments['days'] as int? ?? 7;
+          final days = _asInt(arguments['days']);
           developer.log('📅 [_executeFunction] 获取最近 $days 天日记', name: 'AiService');
           final result = await getRecentDiaries(days);
           developer.log('✅ [_executeFunction] 最近 $days 天日记获取完成, 长度: ${result.length}', name: 'AiService');
@@ -740,14 +761,14 @@ class AiService {
           return result;
           
         case 'getMoodStats':
-          final days = arguments['days'] as int? ?? 7;
+          final days = _asInt(arguments['days']);
           developer.log('📊 [_executeFunction] 获取最近 $days 天心情统计', name: 'AiService');
           final result = await getMoodStats(days);
           developer.log('✅ [_executeFunction] 心情统计获取完成, 长度: ${result.length}', name: 'AiService');
           return result;
           
         case 'getDietStats':
-          final days = arguments['days'] as int? ?? 7;
+          final days = _asInt(arguments['days']);
           developer.log('🍽️ [_executeFunction] 获取最近 $days 天饮食统计', name: 'AiService');
           final result = await getDietStats(days);
           developer.log('✅ [_executeFunction] 饮食统计获取完成, 长度: ${result.length}', name: 'AiService');
@@ -834,6 +855,7 @@ class AiService {
         StringBuffer buffer = StringBuffer();
         String? functionName;
         Map<String, dynamic>? functionArguments;
+        final StringBuffer functionArgumentsBuffer = StringBuffer();
         bool hasDetectedFunction = false;
 
         await for (final chunk in response.stream.transform(utf8.decoder)) {
@@ -843,6 +865,22 @@ class AiService {
               final data = line.substring(6);
               if (data == '[DONE]') {
                 developer.log('✅ [Function Calling] 流结束', name: 'AiService');
+
+                if (functionName != null && functionArguments == null) {
+                  try {
+                    functionArguments = _tryParseToolArguments(
+                      functionArgumentsBuffer.toString(),
+                    );
+                  } catch (e) {
+                    developer.log(
+                      '❌ [Function Calling] 工具参数解析失败: $e, raw=${functionArgumentsBuffer.toString()}',
+                      name: 'AiService',
+                    );
+                    yield '\n查询数据时出错: 工具参数解析失败';
+                    return;
+                  }
+                }
+
                 // 如果收集到了函数调用信息，执行函数
                 if (functionName != null && functionArguments != null) {
                   developer.log('🔧 [Function Calling] 准备执行函数: $functionName, 参数: $functionArguments', name: 'AiService');
@@ -854,14 +892,15 @@ class AiService {
                     developer.log('✅ [Function Calling] 函数执行成功, 结果长度: ${result.length}', name: 'AiService');
                     
                     // 将函数结果发送给 AI 生成最终回复
-                    final functionMessages = [
+                    final toolCallId = 'call_${DateTime.now().millisecondsSinceEpoch}';
+                    final List<Map<String, dynamic>> functionMessages = [
                       ...messages,
                       {
                         'role': 'assistant',
                         'content': null,
                         'tool_calls': [
                           {
-                            'id': 'call_${DateTime.now().millisecondsSinceEpoch}',
+                            'id': toolCallId,
                             'type': 'function',
                             'function': {
                               'name': functionName,
@@ -872,7 +911,7 @@ class AiService {
                       },
                       {
                         'role': 'tool',
-                        'tool_call_id': 'call_${DateTime.now().millisecondsSinceEpoch}',
+                        'tool_call_id': toolCallId,
                         'content': result,
                       },
                     ];
@@ -909,20 +948,25 @@ class AiService {
                       developer.log('📋 [Function Calling] 函数名: $functionName', name: 'AiService');
                     }
                     if (fn['arguments'] != null) {
-                      final args = fn['arguments'] as String;
-                      if (functionArguments == null) {
-                        functionArguments = {};
+                      final argsChunk = fn['arguments'] as String;
+                      if (argsChunk.isNotEmpty) {
+                        functionArgumentsBuffer.write(argsChunk);
                       }
-                      // 累积参数
+
                       try {
-                        final parsed = jsonDecode(args);
-                        if (parsed is Map) {
-                          functionArguments.addAll(parsed.cast<String, dynamic>());
+                        final parsed = _tryParseToolArguments(
+                          functionArgumentsBuffer.toString(),
+                        );
+                        if (parsed != null) {
+                          functionArguments = parsed;
                           developer.log('📊 [Function Calling] 累积参数: $functionArguments', name: 'AiService');
                         }
                       } catch (e) {
                         // 参数可能不完整，继续累积
-                        developer.log('⏳ [Function Calling] 参数不完整，继续累积... 当前args: $args', name: 'AiService');
+                        developer.log(
+                          '⏳ [Function Calling] 参数不完整，继续累积... 当前args: ${functionArgumentsBuffer.toString()}',
+                          name: 'AiService',
+                        );
                       }
                     }
                   }

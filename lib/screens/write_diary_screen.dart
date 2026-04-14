@@ -10,6 +10,7 @@ import '../services/storage_service.dart';
 import '../services/ai_service.dart';
 import '../services/theme_service.dart' show ThemeService, ImageStorageMode;
 import '../widgets/image_gallery_screen.dart';
+import '../widgets/app_top_toast.dart';
 import 'settings_screen.dart';
 
 class WriteDiaryScreen extends StatefulWidget {
@@ -205,15 +206,10 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
   }
 
   void _showSnackBar(String message, {bool isError = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.grey[800],
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
-      ),
+    AppTopToast.show(
+      context,
+      message,
+      isError: isError,
     );
   }
 
@@ -509,7 +505,7 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
       }
     } catch (e) {
       if (mounted) {
-        _showSnackBar('保存失败: $e');
+        _showSnackBar('保存失败: $e', isError: true);
       }
     } finally {
       if (mounted) {
@@ -655,17 +651,19 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
                 ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(8),
-                  child: Image.file(
-                    file,
-                    fit: BoxFit.cover,
-                    cacheWidth: 200, // 限制缓存大小，减少内存占用
-                    cacheHeight: 200,
-                    errorBuilder: (context, error, stackTrace) {
-                      return Container(
-                        color: Colors.grey[200],
-                        child: Icon(Icons.broken_image, color: Colors.grey[500]),
-                      );
-                    },
+                  child: ColoredBox(
+                    color: Colors.grey[200]!,
+                    child: Image.file(
+                      file,
+                      fit: BoxFit.contain,
+                      cacheWidth: 200, // 限制缓存大小，减少内存占用
+                      cacheHeight: 200,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Center(
+                          child: Icon(Icons.broken_image, color: Colors.grey[500]),
+                        );
+                      },
+                    ),
                   ),
                 ),
               ),
@@ -1068,9 +1066,11 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isKeyboardVisible = MediaQuery.of(context).viewInsets.bottom > 0;
+
     return Scaffold(
-      // 禁用自动调整，使用手动处理避免卡顿
-      resizeToAvoidBottomInset: false,
+      // 启用键盘避让，避免输入框被软键盘遮挡
+      resizeToAvoidBottomInset: true,
       body: SafeArea(
         child: Form(
           key: _formKey,
@@ -1079,26 +1079,34 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
               // 顶部区域 - 固定不滚动
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _buildAppBar(),
-                    const SizedBox(height: 4),
-                    // 第一行：今天吃了啥（左）+ 心情天气（右）
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(child: _buildMealSection()),
-                        const SizedBox(width: 12),
-                        Expanded(child: _buildMoodAndWeatherSectionCompact()),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    // 第二行：照片（全宽）
-                    _buildImageSection(),
-                    const SizedBox(height: 12),
-                  ],
+                child: AnimatedSize(
+                  duration: const Duration(milliseconds: 180),
+                  curve: Curves.easeInOut,
+                  alignment: Alignment.topCenter,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _buildAppBar(),
+                      if (!isKeyboardVisible) ...[
+                        const SizedBox(height: 4),
+                        // 第一行：今天吃了啥（左）+ 心情天气（右）
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(child: _buildMealSection()),
+                            const SizedBox(width: 12),
+                            Expanded(child: _buildMoodAndWeatherSectionCompact()),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        // 第二行：照片（全宽）
+                        _buildImageSection(),
+                        const SizedBox(height: 12),
+                      ] else
+                        const SizedBox(height: 8),
+                    ],
+                  ),
                 ),
               ),
               // 内容区域 - 可滚动，使用 Expanded 填充剩余空间

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/diary_entry.dart';
 import '../services/storage_service.dart';
-import 'write_diary_screen.dart';
+import '../widgets/app_top_toast.dart';
 
 class RecycleBinScreen extends StatefulWidget {
   const RecycleBinScreen({super.key});
@@ -54,9 +54,7 @@ class _RecycleBinScreenState extends State<RecycleBinScreen> {
       await _storageService.restoreEntry(entry.id);
       _loadDeletedEntries();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('日记已恢复')),
-        );
+        AppTopToast.show(context, '日记已恢复');
         // 返回true通知主页刷新
         Navigator.pop(context, true);
       }
@@ -86,9 +84,7 @@ class _RecycleBinScreenState extends State<RecycleBinScreen> {
       await _storageService.permanentlyDeleteEntry(entry.id);
       _loadDeletedEntries();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('日记已永久删除')),
-        );
+        AppTopToast.show(context, '日记已永久删除');
       }
     }
   }
@@ -120,9 +116,7 @@ class _RecycleBinScreenState extends State<RecycleBinScreen> {
       }
       _loadDeletedEntries();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('回收站已清空')),
-        );
+        AppTopToast.show(context, '回收站已清空');
       }
     }
   }

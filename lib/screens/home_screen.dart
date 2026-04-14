@@ -195,8 +195,40 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  void _locateToToday() {
+    if (_isAnimating) return;
+
+    final now = DateTime.now();
+    setState(() {
+      _selectedDay = now;
+      _focusedDay = now;
+      if (_isSearching) {
+        _isSearching = false;
+        _searchQuery = '';
+        _searchController.clear();
+      }
+    });
+
+    _isAnimating = true;
+    _pageController
+        .animateToPage(
+          10000,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        )
+        .then((_) {
+          _isAnimating = false;
+        });
+  }
+
   @override
   Widget build(BuildContext context) {
+    final bool isSelectedToday =
+        _selectedDay != null && isSameDay(_selectedDay, DateTime.now());
+    final Color headerDateColor = isSelectedToday
+        ? Colors.red
+        : Theme.of(context).colorScheme.onSurface;
+
     return PopScope(
       canPop: !_isSearching,
       onPopInvoked: (didPop) {
@@ -230,28 +262,28 @@ class _HomeScreenState extends State<HomeScreen> {
                                 '${_selectedDay!.month}',
                                 style: GoogleFonts.righteous(
                                   fontSize: 32,
-                                  color: Theme.of(context).colorScheme.onSurface,
+                                  color: headerDateColor,
                                 ),
                               ),
                               Text(
                                 '月',
                                 style: GoogleFonts.righteous(
                                   fontSize: 16,
-                                  color: Theme.of(context).colorScheme.onSurface,
+                                  color: headerDateColor,
                                 ),
                               ),
                               Text(
                                 '${_selectedDay!.day}',
                                 style: GoogleFonts.righteous(
                                   fontSize: 32,
-                                  color: Theme.of(context).colorScheme.onSurface,
+                                  color: headerDateColor,
                                 ),
                               ),
                               Text(
                                 '日',
                                 style: GoogleFonts.righteous(
                                   fontSize: 16,
-                                  color: Theme.of(context).colorScheme.onSurface,
+                                  color: headerDateColor,
                                 ),
                               ),
                             ],
@@ -393,11 +425,27 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _navigateToWriteDiary(),
-        backgroundColor: Colors.grey[700],
-        foregroundColor: Colors.white,
-        child: const Icon(Icons.edit),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          FloatingActionButton.small(
+            heroTag: 'locate_today_fab',
+            onPressed: _locateToToday,
+            backgroundColor: Colors.grey[300],
+            foregroundColor: Colors.grey[800],
+            tooltip: '定位到今天',
+            child: const Icon(Icons.my_location),
+          ),
+          const SizedBox(height: 12),
+          FloatingActionButton(
+            heroTag: 'write_diary_fab',
+            onPressed: () => _navigateToWriteDiary(),
+            backgroundColor: Colors.grey[700],
+            foregroundColor: Colors.white,
+            child: const Icon(Icons.edit),
+          ),
+        ],
       ),
       ),
     );
