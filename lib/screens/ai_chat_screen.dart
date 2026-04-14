@@ -23,11 +23,16 @@ class _AiChatScreenState extends State<AiChatScreen> {
   bool _isTyping = false;
   bool _isConfigured = false;
   bool _isLoading = true;
-  
+
   // 聊天模式：false = 普通模式（Function Calling）, true = LangChain RAG 模式
   bool _useLangChainRAG = false;
   // 会话 ID（用于 LangChain 记忆）
   final String _sessionId = 'default_session';
+
+  // 用于流式输出的缓冲和节流控制
+  final StringBuffer _streamBuffer = StringBuffer();
+  Timer? _streamThrottleTimer;
+  static const Duration _streamThrottleInterval = Duration(milliseconds: 100); // 每 100ms 更新一次 UI
 
   @override
   void initState() {
@@ -59,7 +64,37 @@ class _AiChatScreenState extends State<AiChatScreen> {
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
+    _streamThrottleTimer?.cancel();
     super.dispose();
+  }
+
+  /// 刷新流式输出到 UI（带节流）
+  void _flushStreamBuffer(ChatMessage aiMessage) {
+    _streamThrottleTimer?.cancel();
+    if (_streamBuffer.isNotEmpty) {
+      setState(() {
+        aiMessage.content += _streamBuffer.toString();
+        _streamBuffer.clear();
+      });
+      // 只在刷新 UI 时滚动，且使用 jumpTo 避免动画卡顿
+      _scrollToBottomImmediate();
+    }
+  }
+
+  /// 安排刷新（节流控制）
+  void _scheduleFlush(ChatMessage aiMessage) {
+    _streamThrottleTimer?.cancel();
+    _streamThrottleTimer = Timer(_streamThrottleInterval, () {
+      _flushStreamBuffer(aiMessage);
+    });
+  }
+
+  /// 立即滚动到底部（无动画，避免卡顿）
+  void _scrollToBottomImmediate() {
+    if (_scrollController.hasClients) {
+      // 使用 jumpTo 而不是 animateTo，避免动画影响性能
+      _scrollController.jumpTo(0);
+    }
   }
 
   void _scrollToBottom() {
@@ -113,11 +148,11 @@ class _AiChatScreenState extends State<AiChatScreen> {
           sessionId: _sessionId,
           message: message,
         )) {
-          setState(() {
-            aiMessage.content += chunk;
-          });
-          _scrollToBottom();
+          _streamBuffer.write(chunk);
+          _scheduleFlush(aiMessage);
         }
+        // 确保最后的内容被刷新
+        _flushStreamBuffer(aiMessage);
       } else {
         // 使用原 Function Calling 模式
         // 获取当前时间
@@ -187,11 +222,11 @@ class _AiChatScreenState extends State<AiChatScreen> {
           messageHistory,
           systemPrompt: systemPrompt,
         )) {
-          setState(() {
-            aiMessage.content += chunk;
-          });
-          _scrollToBottom();
+          _streamBuffer.write(chunk);
+          _scheduleFlush(aiMessage);
         }
+        // 确保最后的内容被刷新
+        _flushStreamBuffer(aiMessage);
       }
 
       // 保存更新后的消息
@@ -321,7 +356,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                 color: _useLangChainRAG ? Colors.green : null,
               ),
               label: Text(
-                _useLangChainRAG ? 'RAG模式' : '普通模式',
+                _useLangChainRAG ? '本地RAG' : '普通模式',
                 style: TextStyle(
                   color: _useLangChainRAG ? Colors.green : null,
                 ),
@@ -430,7 +465,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
           Text(
             !_isConfigured
                 ? '请先配置 AI API 才能使用\n前往设置页面配置 API 地址和密钥'
-                : '和我聊聊吧，我可以帮你：\n• 分析日记内容\n• 提供心情建议\n• 回答各种问题',
+                : '和我聊聊吧，我可以帮你：\n• 分析日记内容\n• 提供心情建议\n• 回答各种问题\n\n💡 切换到「本地RAG」模式可基于日记内容智能回答',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 14,

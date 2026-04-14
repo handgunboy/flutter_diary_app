@@ -106,14 +106,19 @@ class PersistentVectorStore {
     
     for (final record in records) {
       final data = record.value;
-      final storedEmbedding = (data['embedding'] as List).cast<double>();
+      
+      // 安全地转换 embedding，处理从数据库读取的 List<dynamic>
+      final embeddingRaw = data['embedding'];
+      if (embeddingRaw == null || embeddingRaw is! List) continue;
+      
+      final storedEmbedding = embeddingRaw.map((e) => (e as num).toDouble()).toList();
       
       // 计算余弦相似度
       final similarity = _cosineSimilarity(embedding, storedEmbedding);
       
       final doc = Document(
         id: record.key,
-        pageContent: data['content'] as String,
+        pageContent: data['content'] as String? ?? '',
         metadata: (data['metadata'] as Map?)?.cast<String, dynamic>() ?? {},
       );
       

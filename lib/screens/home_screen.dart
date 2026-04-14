@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
@@ -24,7 +25,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final PageController _pageController = PageController(initialPage: 10000);
   final TextEditingController _searchController = TextEditingController();
-  
+
   CalendarFormat _calendarFormat = CalendarFormat.month;
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
@@ -32,6 +33,11 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isAnimating = false;
   bool _isSearching = false;
   String _searchQuery = '';
+
+  // 图片文件缓存
+  final Map<String, File> _imageFileCache = {};
+  // 搜索防抖定时器
+  Timer? _searchDebounceTimer;
 
   @override
   void initState() {
@@ -44,6 +50,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     _pageController.dispose();
     _searchController.dispose();
+    _searchDebounceTimer?.cancel();
     super.dispose();
   }
 
@@ -277,8 +284,12 @@ class _HomeScreenState extends State<HomeScreen> {
                             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                           ),
                           onChanged: (value) {
-                            setState(() {
-                              _searchQuery = value;
+                            // 防抖处理，300ms 后才更新搜索
+                            _searchDebounceTimer?.cancel();
+                            _searchDebounceTimer = Timer(const Duration(milliseconds: 300), () {
+                              setState(() {
+                                _searchQuery = value;
+                              });
                             });
                           },
                           onTapOutside: (_) {
@@ -489,13 +500,14 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 // 自定义年月选择器
                 _buildCalendarHeader(),
-              // 日历主体 - 设置固定高度
+              // 日历主体 - 设置固定高度和行高
               SizedBox(
                 height: 350,
                 child: TableCalendar<DiaryEntry>(
                   firstDay: DateTime.utc(2020, 1, 1),
                   lastDay: DateTime.utc(2030, 12, 31),
                   focusedDay: _focusedDay,
+                  rowHeight: 46, // 固定每行高度，确保格子是正方形
                   selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
                   eventLoader: _getEventsForDay,
                   onDaySelected: (selectedDay, focusedDay) {
@@ -562,10 +574,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   calendarBuilders: CalendarBuilders(
                     dowBuilder: (context, day) {
                       final weekdays = ['一', '二', '三', '四', '五', '六', '日'];
-                      final weekdayIndex = day.weekday - 1; // Monday = 1, so index = 0
-                      final isWeekend = day.weekday == 6 || day.weekday == 7; // Saturday or Sunday
+                      final weekdayIndex = day.weekday - 1;
+                      final isWeekend = day.weekday == 6 || day.weekday == 7;
                       final isDark = Theme.of(context).brightness == Brightness.dark;
-                      
+
                       return Center(
                         child: Text(
                           weekdays[weekdayIndex],
@@ -580,19 +592,29 @@ class _HomeScreenState extends State<HomeScreen> {
                       );
                     },
                     defaultBuilder: (context, day, focusedDay) {
-                      return _buildCalendarDay(day, focusedDay, false, false);
+                      return RepaintBoundary(
+                        child: _buildCalendarDay(day, focusedDay, false, false),
+                      );
                     },
                     todayBuilder: (context, day, focusedDay) {
-                      return _buildCalendarDay(day, focusedDay, true, false);
+                      return RepaintBoundary(
+                        child: _buildCalendarDay(day, focusedDay, true, false),
+                      );
                     },
                     selectedBuilder: (context, day, focusedDay) {
-                      return _buildCalendarDay(day, focusedDay, false, true);
+                      return RepaintBoundary(
+                        child: _buildCalendarDay(day, focusedDay, false, true),
+                      );
                     },
                     outsideBuilder: (context, day, focusedDay) {
-                      return _buildCalendarDay(day, focusedDay, false, false, isOutside: true);
+                      return RepaintBoundary(
+                        child: _buildCalendarDay(day, focusedDay, false, false, isOutside: true),
+                      );
                     },
                     disabledBuilder: (context, day, focusedDay) {
-                      return _buildCalendarDay(day, focusedDay, false, false, isDisabled: true);
+                      return RepaintBoundary(
+                        child: _buildCalendarDay(day, focusedDay, false, false, isDisabled: true),
+                      );
                     },
                   ),
                 ),
@@ -733,13 +755,19 @@ class _HomeScreenState extends State<HomeScreen> {
     final date = DateTime(day.year, day.month, day.day);
     final entries = _events[date] ?? [];
     if (entries.isEmpty) return null;
-    
+
     // 获取第一个日记的第一张图片
     final firstEntry = entries.first;
     if (firstEntry.images.isNotEmpty) {
       return firstEntry.images.first;
     }
     return null;
+  }
+
+  // 获取缓存的 File 对象
+  File? _getCachedImageFile(String? path) {
+    if (path == null) return null;
+    return _imageFileCache.putIfAbsent(path, () => File(path));
   }
 
   Widget _buildCalendarDay(
@@ -785,6 +813,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     // 如果有图片，显示图片背景
     if (imagePath != null && !isDisabled) {
+      final cachedFile = _getCachedImageFile(imagePath);
       dayWidget = AspectRatio(
         aspectRatio: 1,
         child: Container(
@@ -803,12 +832,13 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                // 图片背景
+                // 图片背景 - 使用缓存的 File，保持原比例裁剪
                 Image.file(
-                  File(imagePath),
+                  cachedFile!,
                   fit: BoxFit.cover,
+                  cacheWidth: 200,
+                  cacheHeight: 200,
                   errorBuilder: (context, error, stackTrace) {
-                    // 图片加载失败时显示默认样式
                     return Container(
                       color: isToday
                           ? Theme.of(context).colorScheme.primaryContainer
@@ -1181,15 +1211,18 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 图片区域
+          // 图片区域 - 使用固定高度避免挤压
           if (hasImage)
             ClipRRect(
               borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-              child: AspectRatio(
-                aspectRatio: 16 / 9,
+              child: SizedBox(
+                height: 120, // 固定高度，宽度自适应
+                width: double.infinity,
                 child: Image.file(
-                  File(entry.images.first),
+                  _getCachedImageFile(entry.images.first)!,
                   fit: BoxFit.cover,
+                  cacheWidth: 400,
+                  cacheHeight: 300,
                   errorBuilder: (context, error, stackTrace) {
                     return Container(
                       color: isDark ? Colors.grey[700] : Colors.grey[200],

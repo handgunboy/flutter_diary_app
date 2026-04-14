@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:io';
+import 'dart:ui' show lerpDouble;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
@@ -93,6 +95,7 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
     _weatherController.dispose();
     _weightController.dispose();
     _summaryController.dispose();
+    _onChangeDebounceTimer?.cancel();
     super.dispose();
   }
 
@@ -562,6 +565,22 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
                 child: ReorderableListView.builder(
                   scrollDirection: Axis.horizontal,
                   itemCount: _images.length,
+                  // 使用 const 构造函数减少重建
+                  proxyDecorator: (child, index, animation) {
+                    return AnimatedBuilder(
+                      animation: animation,
+                      builder: (context, child) {
+                        final double animValue = Curves.easeInOut.transform(animation.value);
+                        final double elevation = lerpDouble(0, 6, animValue)!;
+                        return Material(
+                          elevation: elevation,
+                          color: Colors.transparent,
+                          child: child,
+                        );
+                      },
+                      child: child,
+                    );
+                  },
                   itemBuilder: (context, index) {
                     return _buildImageThumbnail(index);
                   },
@@ -609,8 +628,14 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
     }
   }
 
+  // 图片文件缓存，避免重复读取
+  final Map<String, File> _imageFileCache = {};
+
   Widget _buildImageThumbnail(int index) {
     final path = _images[index];
+
+    // 从缓存获取 File 对象
+    final file = _imageFileCache.putIfAbsent(path, () => File(path));
 
     return Container(
       key: ValueKey(path),
@@ -620,7 +645,7 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
           GestureDetector(
             onTap: () => _showFullScreenImage(index),
             child: Hero(
-              tag: 'image_$index',
+              tag: 'image_$path', // 使用 path 作为 tag 更稳定
               child: Container(
                 width: 100,
                 height: 100,
@@ -631,8 +656,10 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(8),
                   child: Image.file(
-                    File(path),
+                    file,
                     fit: BoxFit.cover,
+                    cacheWidth: 200, // 限制缓存大小，减少内存占用
+                    cacheHeight: 200,
                     errorBuilder: (context, error, stackTrace) {
                       return Container(
                         color: Colors.grey[200],
@@ -860,6 +887,8 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
   }
 
   String? _lastValue;
+  // 用于节流 onChanged 的定时器
+  Timer? _onChangeDebounceTimer;
 
   // 显示全屏日记编辑对话框
   void _showFullScreenEditor() async {
@@ -925,8 +954,11 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
                 keyboardType: TextInputType.multiline,
                 textAlignVertical: TextAlignVertical.bottom, // 从底部对齐
                 onChanged: (value) {
+                  // 取消之前的定时器
+                  _onChangeDebounceTimer?.cancel();
+
                   // 检测是否刚输入了换行符（通过比较上次值和当前值）
-                  if (_lastValue != null && 
+                  if (_lastValue != null &&
                       value.length > _lastValue!.length &&
                       value.endsWith('\n')) {
                     final now = DateTime.now();
@@ -938,7 +970,11 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
                       TextPosition(offset: _contentController.text.length),
                     );
                   }
-                  _lastValue = _contentController.text;
+
+                  // 使用节流，每 500ms 才更新一次 _lastValue
+                  _onChangeDebounceTimer = Timer(const Duration(milliseconds: 500), () {
+                    _lastValue = _contentController.text;
+                  });
                 },
               ),
             ),
@@ -953,41 +989,29 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
       key: _contentFieldKey,
       child: Padding(
         padding: const EdgeInsets.all(12),
-        child: SizedBox.expand(
-          child: TextFormField(
-            controller: _contentController,
-            decoration: InputDecoration(
-              hintText: '记录今天的故事...',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              alignLabelWithHint: true,
-              contentPadding: const EdgeInsets.all(12),
+        child: TextFormField(
+          controller: _contentController,
+          decoration: InputDecoration(
+            hintText: '记录今天的故事...',
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
             ),
-            maxLines: null,
-            expands: true,
-            textAlignVertical: TextAlignVertical.top,
-            validator: (value) {
-              if (value == null || value.trim().isEmpty) {
-                return '请填写日记内容';
-              }
-              return null;
-            },
-            onTap: () {
-              // 延迟滚动到底部，确保键盘弹出后输入框底部可见
-              Future.delayed(const Duration(milliseconds: 300), () {
-                if (_contentFieldKey.currentContext != null) {
-                  Scrollable.ensureVisible(
-                    _contentFieldKey.currentContext!,
-                    duration: const Duration(milliseconds: 200),
-                    curve: Curves.easeOut,
-                    alignment: 1.0, // 1.0 表示滚动到视口底部
-                  );
-                }
-              });
-              
-              // 首次点击且内容为空时，添加当前时间
-              if (_contentController.text.isEmpty) {
+            alignLabelWithHint: true,
+            contentPadding: const EdgeInsets.all(12),
+          ),
+          maxLines: null,
+          expands: true,
+          textAlignVertical: TextAlignVertical.top,
+          validator: (value) {
+            if (value == null || value.trim().isEmpty) {
+              return '请填写日记内容';
+            }
+            return null;
+          },
+          onTap: () {
+            // 首次点击且内容为空时，添加当前时间（使用微任务避免阻塞UI）
+            if (_contentController.text.isEmpty) {
+              Future.microtask(() {
                 final now = DateTime.now();
                 final timeStr = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
                 _contentController.text = '$timeStr ';
@@ -996,25 +1020,32 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
                 _contentController.selection = TextSelection.fromPosition(
                   TextPosition(offset: _contentController.text.length),
                 );
-              }
-            },
-            onChanged: (value) {
-              // 检测是否刚输入了换行符（通过比较上次值和当前值）
-              if (_lastValue != null && 
-                  value.length > _lastValue!.length &&
-                  value.endsWith('\n')) {
-                final now = DateTime.now();
-                final timeStr = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
-                // 在换行后添加时间
-                _contentController.text = '$value$timeStr ';
-                // 将光标移到末尾
-                _contentController.selection = TextSelection.fromPosition(
-                  TextPosition(offset: _contentController.text.length),
-                );
-              }
+              });
+            }
+          },
+          onChanged: (value) {
+            // 取消之前的定时器
+            _onChangeDebounceTimer?.cancel();
+
+            // 检测是否刚输入了换行符（通过比较上次值和当前值）
+            if (_lastValue != null &&
+                value.length > _lastValue!.length &&
+                value.endsWith('\n')) {
+              final now = DateTime.now();
+              final timeStr = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+              // 在换行后添加时间
+              _contentController.text = '$value$timeStr ';
+              // 将光标移到末尾
+              _contentController.selection = TextSelection.fromPosition(
+                TextPosition(offset: _contentController.text.length),
+              );
+            }
+
+            // 使用节流，每 500ms 才更新一次 _lastValue
+            _onChangeDebounceTimer = Timer(const Duration(milliseconds: 500), () {
               _lastValue = _contentController.text;
-            },
-          ),
+            });
+          },
         ),
       ),
     );
@@ -1038,41 +1069,53 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      resizeToAvoidBottomInset: true,
+      // 禁用自动调整，使用手动处理避免卡顿
+      resizeToAvoidBottomInset: false,
       body: SafeArea(
         child: Form(
           key: _formKey,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.start,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _buildAppBar(),
-                const SizedBox(height: 4),
-                // 第一行：今天吃了啥（左）+ 心情天气（右）
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          child: Column(
+            children: [
+              // 顶部区域 - 固定不滚动
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Expanded(child: _buildMealSection()),
-                    const SizedBox(width: 12),
-                    Expanded(child: _buildMoodAndWeatherSectionCompact()),
+                    _buildAppBar(),
+                    const SizedBox(height: 4),
+                    // 第一行：今天吃了啥（左）+ 心情天气（右）
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: _buildMealSection()),
+                        const SizedBox(width: 12),
+                        Expanded(child: _buildMoodAndWeatherSectionCompact()),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    // 第二行：照片（全宽）
+                    _buildImageSection(),
+                    const SizedBox(height: 12),
                   ],
                 ),
-                const SizedBox(height: 12),
-                // 第二行：照片（全宽）
-                _buildImageSection(),
-                const SizedBox(height: 16),
-                // 日记内容区域（固定高度）
-                SizedBox(
-                  height: MediaQuery.of(context).size.height * 0.30,
-                  child: _buildContentSection(),
+              ),
+              // 内容区域 - 可滚动，使用 Expanded 填充剩余空间
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(child: _buildContentSection()),
+                      const SizedBox(height: 8),
+                      _buildTimestampSection(),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 8),
-                // 时间戳
-                _buildTimestampSection(),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -1083,17 +1126,42 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
 // 自定义 TextEditingController，用于高亮时间格式
 class _TimeHighlightController extends TextEditingController {
   // 时间格式正则表达式 (HH:mm)
-  final RegExp _timeRegex = RegExp(r'\b(\d{2}):(\d{2})\b');
+  static final RegExp _timeRegex = RegExp(r'\b(\d{2}):(\d{2})\b');
+
+  // 缓存上次构建的文本和结果，避免重复计算
+  String? _lastText;
+  TextSpan? _lastSpan;
+  bool? _lastIsDark;
 
   @override
   TextSpan buildTextSpan({required BuildContext context, TextStyle? style, required bool withComposing}) {
-    final List<InlineSpan> spans = [];
     final String text = this.text;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    // 如果文本和主题都没有变化，直接返回缓存的结果
+    if (text == _lastText && _lastIsDark == isDark && _lastSpan != null) {
+      return _lastSpan!;
+    }
+
+    _lastText = text;
+    _lastIsDark = isDark;
+
+    // 如果文本很短或没有内容，直接返回普通文本
+    if (text.isEmpty) {
+      _lastSpan = TextSpan(text: text, style: style);
+      return _lastSpan!;
+    }
+
+    // 如果文本很长（超过1000字符），跳过复杂的高亮处理，直接返回普通文本
+    if (text.length > 1000) {
+      _lastSpan = TextSpan(text: text, style: style);
+      return _lastSpan!;
+    }
+
+    final List<InlineSpan> spans = [];
     int lastMatchEnd = 0;
 
     // 获取主题颜色
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final timeColor = isDark ? Colors.grey[400] : Colors.grey[700];
 
     // 查找所有时间格式并高亮
@@ -1106,7 +1174,7 @@ class _TimeHighlightController extends TextEditingController {
         ));
       }
 
-      // 添加时间纯文本样式 - 使用 TextSpan 而不是 WidgetSpan，便于删除
+      // 添加时间纯文本样式
       final timeText = match.group(0)!;
       spans.add(TextSpan(
         text: timeText,
@@ -1129,9 +1197,11 @@ class _TimeHighlightController extends TextEditingController {
 
     // 如果没有匹配到时间，返回普通文本
     if (spans.isEmpty) {
-      return TextSpan(text: text, style: style);
+      _lastSpan = TextSpan(text: text, style: style);
+      return _lastSpan!;
     }
 
-    return TextSpan(children: spans);
+    _lastSpan = TextSpan(children: spans);
+    return _lastSpan!;
   }
 }

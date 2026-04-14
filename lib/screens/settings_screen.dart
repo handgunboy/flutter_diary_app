@@ -1,9 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:open_filex/open_filex.dart';
+import 'package:open_file_manager/open_file_manager.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../services/theme_service.dart' show ThemeService, ImageStorageMode, ThemeModeType;
@@ -92,19 +94,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
             SnackBar(
               content: InkWell(
                 onTap: () async {
-                  // 打开文件所在文件夹
-                  final file = File(zipPath);
-                  if (await file.exists()) {
-                    final result = await OpenFilex.open(zipPath);
-                    if (result.type != ResultType.done) {
+                  // 尝试打开文件所在文件夹
+                  try {
+                    final directory = File(zipPath).parent.path;
+                    await openFileManager(
+                      androidConfig: AndroidConfig(
+                        folderType: AndroidFolderType.other,
+                        folderPath: directory,
+                      ),
+                    );
+                  } catch (e) {
+                    // 如果打开文件夹失败，复制路径到剪贴板
+                    await Clipboard.setData(ClipboardData(text: zipPath));
+                    if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('无法打开文件: ${result.message}')),
+                        const SnackBar(
+                          content: Text('路径已复制到剪贴板'),
+                          duration: Duration(seconds: 2),
+                        ),
                       );
                     }
                   }
                 },
                 child: Text(
-                  '数据已导出到: $zipPath\n点击查看文件',
+                  '数据已导出到: $zipPath\n点击打开文件夹',
                   style: const TextStyle(
                     decoration: TextDecoration.underline,
                     color: Colors.yellow,
@@ -113,9 +126,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               duration: const Duration(seconds: 8),
               action: SnackBarAction(
-                label: '知道了',
-                onPressed: () {
-                  ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                label: '打开文件',
+                onPressed: () async {
+                  // 打开文件
+                  final file = File(zipPath);
+                  if (await file.exists()) {
+                    final result = await OpenFilex.open(zipPath);
+                    if (result.type != ResultType.done && mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('无法打开文件: ${result.message}')),
+                      );
+                    }
+                  }
                 },
               ),
             ),
