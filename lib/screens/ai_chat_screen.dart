@@ -4,6 +4,8 @@ import 'package:intl/intl.dart';
 import '../services/ai_service.dart';
 import '../services/langchain_service.dart';
 import '../services/chat_storage_service.dart';
+import '../theme/app_colors.dart';
+import '../widgets/app_ui.dart';
 import 'settings_screen.dart';
 
 class AiChatScreen extends StatefulWidget {
@@ -32,7 +34,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
   // 用于流式输出的缓冲和节流控制
   final StringBuffer _streamBuffer = StringBuffer();
   Timer? _streamThrottleTimer;
-  static const Duration _streamThrottleInterval = Duration(milliseconds: 100); // 每 100ms 更新一次 UI
+  static const Duration _streamThrottleInterval = Duration(milliseconds: 140); // 降低 UI 刷新频率减少卡顿
 
   @override
   void initState() {
@@ -92,8 +94,11 @@ class _AiChatScreenState extends State<AiChatScreen> {
   /// 立即滚动到底部（无动画，避免卡顿）
   void _scrollToBottomImmediate() {
     if (_scrollController.hasClients) {
-      // 使用 jumpTo 而不是 animateTo，避免动画影响性能
-      _scrollController.jumpTo(0);
+      // 只有在接近底部时才自动吸附，避免高频滚动抖动
+      final nearBottom = _scrollController.position.pixels <= 120;
+      if (nearBottom) {
+        _scrollController.jumpTo(0);
+      }
     }
   }
 
@@ -272,6 +277,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
   }
 
   Future<void> _clearChat() async {
+    final colors = AppColors.of(context);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -284,7 +290,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            style: TextButton.styleFrom(foregroundColor: colors.danger),
             child: const Text('清空'),
           ),
         ],
@@ -328,15 +334,15 @@ class _AiChatScreenState extends State<AiChatScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final accentColor = theme.colorScheme.primary;
     
     return Scaffold(
       appBar: AppBar(
         title: const Text('小坡'),
         elevation: 0,
         scrolledUnderElevation: 0,
-        backgroundColor: isDark ? theme.colorScheme.surface : theme.colorScheme.surface,
-        foregroundColor: isDark ? theme.colorScheme.onSurface : theme.colorScheme.onSurface,
+        backgroundColor: theme.colorScheme.surface,
+        foregroundColor: theme.colorScheme.onSurface,
         actions: [
           // 模式切换按钮
           if (_isConfigured)
@@ -353,12 +359,12 @@ class _AiChatScreenState extends State<AiChatScreen> {
               icon: Icon(
                 _useLangChainRAG ? Icons.psychology : Icons.chat_bubble_outline,
                 size: 18,
-                color: _useLangChainRAG ? Colors.green : null,
+                color: _useLangChainRAG ? accentColor : AppUi.mutedIcon(context),
               ),
               label: Text(
                 _useLangChainRAG ? '本地RAG' : '普通模式',
                 style: TextStyle(
-                  color: _useLangChainRAG ? Colors.green : null,
+                  color: _useLangChainRAG ? accentColor : AppUi.mutedText(context),
                 ),
               ),
             ),
@@ -381,7 +387,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
               icon: const Icon(Icons.settings, size: 18),
               label: const Text('配置'),
               style: TextButton.styleFrom(
-                foregroundColor: Colors.red,
+                foregroundColor: theme.colorScheme.error,
               ),
             ),
         ],
@@ -395,7 +401,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                       ? _buildEmptyState()
                       : ListView.builder(
                           controller: _scrollController,
-                          padding: const EdgeInsets.all(16),
+                          padding: AppUi.pagePadding,
                           reverse: true,
                           itemCount: _messages.length,
                           itemBuilder: (context, index) {
@@ -414,6 +420,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
   Widget _buildMessageItem(int index) {
     final message = _messages[index];
     final showTime = _shouldShowTimeDivider(index);
+    final theme = Theme.of(context);
 
     return Column(
       children: [
@@ -424,14 +431,14 @@ class _AiChatScreenState extends State<AiChatScreen> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                 decoration: BoxDecoration(
-                  color: Colors.grey[200],
+                  color: AppUi.subtleSurface(context),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
                   _formatTime(message.timestamp),
                   style: TextStyle(
                     fontSize: 12,
-                    color: Colors.grey[600],
+                    color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
               ),
@@ -443,6 +450,8 @@ class _AiChatScreenState extends State<AiChatScreen> {
   }
 
   Widget _buildEmptyState() {
+    final theme = Theme.of(context);
+
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -458,7 +467,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
-              color: Colors.grey[600],
+              color: theme.colorScheme.onSurface,
             ),
           ),
           const SizedBox(height: 8),
@@ -469,7 +478,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 14,
-              color: Colors.grey[500],
+              color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
           if (!_isConfigured) ...[
@@ -494,6 +503,10 @@ class _AiChatScreenState extends State<AiChatScreen> {
 
   Widget _buildMessageBubble(ChatMessage message) {
     final isUser = message.isUser;
+    final theme = Theme.of(context);
+    final colors = AppColors.of(context);
+    final assistantBubbleColor = colors.surfaceSubtle;
+    final assistantTextColor = theme.colorScheme.onSurface;
 
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
@@ -521,8 +534,8 @@ class _AiChatScreenState extends State<AiChatScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
                   color: isUser
-                      ? Theme.of(context).colorScheme.primary
-                      : Colors.grey[200],
+                      ? theme.colorScheme.primary
+                      : assistantBubbleColor,
                   borderRadius: BorderRadius.only(
                     topLeft: const Radius.circular(16),
                     topRight: const Radius.circular(16),
@@ -533,7 +546,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                 child: Text(
                   message.content,
                   style: TextStyle(
-                    color: isUser ? Colors.white : Colors.black87,
+                    color: isUser ? theme.colorScheme.onPrimary : assistantTextColor,
                     fontSize: 15,
                   ),
                 ),
@@ -545,13 +558,13 @@ class _AiChatScreenState extends State<AiChatScreen> {
                 width: 32,
                 height: 32,
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary,
+                  color: theme.colorScheme.primary,
                   borderRadius: BorderRadius.circular(16),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.person,
                   size: 18,
-                  color: Colors.white,
+                  color: theme.colorScheme.onPrimary,
                 ),
               ),
             ],
@@ -562,13 +575,25 @@ class _AiChatScreenState extends State<AiChatScreen> {
   }
 
   Widget _buildInputArea() {
+    final theme = Theme.of(context);
+    final colors = AppColors.of(context);
+    final areaBg = colors.background;
+    final sendBg = _isConfigured
+        ? theme.colorScheme.primary
+        : colors.outlineStrong;
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: areaBg,
+        border: Border(
+          top: BorderSide(
+            color: colors.outline,
+          ),
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: colors.shadowSoft,
             blurRadius: 4,
             offset: const Offset(0, -2),
           ),
@@ -583,7 +608,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                 decoration: InputDecoration(
                   hintText: _isConfigured ? '输入消息...' : '请先配置 AI API',
                   filled: true,
-                  fillColor: Colors.grey[100],
+                  fillColor: AppUi.subtleSurface(context),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(24),
                     borderSide: BorderSide.none,
@@ -602,23 +627,21 @@ class _AiChatScreenState extends State<AiChatScreen> {
             const SizedBox(width: 8),
             Container(
               decoration: BoxDecoration(
-                color: _isConfigured
-                    ? Theme.of(context).colorScheme.primary
-                    : Colors.grey[400],
+                color: sendBg,
                 borderRadius: BorderRadius.circular(24),
               ),
               child: IconButton(
                 onPressed: (_isTyping || !_isConfigured) ? null : _sendMessage,
                 icon: _isTyping
-                    ? const SizedBox(
+                    ? SizedBox(
                         width: 20,
                         height: 20,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Colors.white,
+                          color: theme.colorScheme.onPrimary,
                         ),
                       )
-                    : const Icon(Icons.send, color: Colors.white),
+                    : Icon(Icons.send, color: theme.colorScheme.onPrimary),
               ),
             ),
           ],

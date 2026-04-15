@@ -1,17 +1,22 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:photo_view/photo_view.dart';
+import '../services/gallery_service.dart';
+import '../theme/app_colors.dart';
+import 'app_top_toast.dart';
 
 class ImageGalleryScreen extends StatefulWidget {
   final List<String> images;
   final int initialIndex;
   final Function(int)? onDelete;
+  final bool canDelete;
 
   const ImageGalleryScreen({
     super.key,
     required this.images,
     required this.initialIndex,
     this.onDelete,
+    this.canDelete = false,
   });
 
   @override
@@ -20,8 +25,10 @@ class ImageGalleryScreen extends StatefulWidget {
 
 class _ImageGalleryScreenState extends State<ImageGalleryScreen> {
   late final PageController _pageController;
+  final GalleryService _galleryService = GalleryService();
   late int _currentIndex;
   late List<String> _images;
+  bool _isSaving = false;
 
   @override
   void initState() {
@@ -39,14 +46,21 @@ class _ImageGalleryScreenState extends State<ImageGalleryScreen> {
 
   // 删除当前图片
   void _deleteCurrentImage() {
+    if (!widget.canDelete) return;
     if (_images.isEmpty) return;
     
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Colors.grey[900],
-        title: const Text('删除', style: TextStyle(color: Colors.white)),
-        content: const Text('确定要删除这张图片吗？', style: TextStyle(color: Colors.white70)),
+      builder: (context) {
+        final colors = AppColors.of(context);
+        final theme = Theme.of(context);
+        return AlertDialog(
+        backgroundColor: colors.surface,
+        title: Text('删除', style: TextStyle(color: theme.colorScheme.onSurface)),
+        content: Text(
+          '确定要删除这张图片吗？',
+          style: TextStyle(color: colors.textSecondary),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -57,10 +71,11 @@ class _ImageGalleryScreenState extends State<ImageGalleryScreen> {
               Navigator.pop(context);
               _confirmDelete();
             },
-            child: const Text('删除', style: TextStyle(color: Colors.red)),
+            child: Text('删除', style: TextStyle(color: colors.danger)),
           ),
         ],
-      ),
+      );
+      },
     );
   }
 
@@ -87,14 +102,33 @@ class _ImageGalleryScreenState extends State<ImageGalleryScreen> {
     }
   }
 
+  Future<void> _saveCurrentImage() async {
+    if (_images.isEmpty || _isSaving) return;
+    final imagePath = _images[_currentIndex];
+    setState(() {
+      _isSaving = true;
+    });
+    final success = await _galleryService.saveImageToGallery(imagePath);
+    if (!mounted) return;
+    setState(() {
+      _isSaving = false;
+    });
+    AppTopToast.show(
+      context,
+      success ? '已保存到相册' : '保存失败',
+      isError: !success,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     if (_images.isEmpty) {
       return Scaffold(
-        backgroundColor: Colors.black,
+        backgroundColor: colors.scrim,
         body: Center(
           child: IconButton(
-            icon: const Icon(Icons.close, color: Colors.white, size: 30),
+            icon: Icon(Icons.close, color: colors.actionPrimaryForeground, size: 30),
             onPressed: () => Navigator.pop(context),
           ),
         ),
@@ -102,7 +136,7 @@ class _ImageGalleryScreenState extends State<ImageGalleryScreen> {
     }
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: colors.scrim,
       body: Stack(
         children: [
           PageView.builder(
@@ -119,8 +153,8 @@ class _ImageGalleryScreenState extends State<ImageGalleryScreen> {
                 minScale: PhotoViewComputedScale.contained,
                 maxScale: PhotoViewComputedScale.covered * 3,
                 heroAttributes: PhotoViewHeroAttributes(tag: 'image_$index'),
-                backgroundDecoration: const BoxDecoration(
-                  color: Colors.black,
+                backgroundDecoration: BoxDecoration(
+                  color: colors.scrim,
                 ),
               );
             },
@@ -133,15 +167,44 @@ class _ImageGalleryScreenState extends State<ImageGalleryScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // 删除按钮
-                IconButton(
-                  icon: const Icon(Icons.delete_outline, color: Colors.white, size: 28),
-                  onPressed: _deleteCurrentImage,
-                ),
+                if (widget.canDelete)
+                  IconButton(
+                    icon: Icon(
+                      Icons.delete_outline,
+                      color: colors.actionPrimaryForeground,
+                      size: 28,
+                    ),
+                    onPressed: _deleteCurrentImage,
+                  )
+                else
+                  const SizedBox(width: 48, height: 48),
                 // 关闭按钮
-                IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white, size: 30),
-                  onPressed: () => Navigator.pop(context, {'currentIndex': _currentIndex}),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: _isSaving
+                          ? SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: colors.actionPrimaryForeground,
+                              ),
+                            )
+                          : Icon(
+                              Icons.download_outlined,
+                              color: colors.actionPrimaryForeground,
+                              size: 28,
+                            ),
+                      tooltip: '保存到相册',
+                      onPressed: _isSaving ? null : _saveCurrentImage,
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.close, color: colors.actionPrimaryForeground, size: 30),
+                      onPressed: () => Navigator.pop(context, {'currentIndex': _currentIndex}),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -162,8 +225,8 @@ class _ImageGalleryScreenState extends State<ImageGalleryScreen> {
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: _currentIndex == index
-                          ? Colors.white
-                          : Colors.white.withOpacity(0.4),
+                          ? colors.actionPrimaryForeground
+                          : colors.actionPrimaryForeground.withValues(alpha: 0.4),
                     ),
                   ),
                 ),

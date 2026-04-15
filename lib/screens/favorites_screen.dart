@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/diary_entry.dart';
 import '../services/storage_service.dart';
+import '../theme/app_colors.dart';
 import '../widgets/app_top_toast.dart';
 import '../widgets/diary_card.dart';
 import 'write_diary_screen.dart';
@@ -57,6 +58,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
   }
 
   Future<void> _deleteEntry(DiaryEntry entry) async {
+    final colors = AppColors.of(context);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -69,7 +71,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('删除', style: TextStyle(color: Colors.red)),
+            child: Text('删除', style: TextStyle(color: colors.danger)),
           ),
         ],
       ),
@@ -113,6 +115,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
   }
 
   Widget _buildEmptyState() {
+    final colors = AppColors.of(context);
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -120,14 +123,14 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
           Icon(
             Icons.favorite_border,
             size: 64,
-            color: Colors.grey[400],
+            color: colors.calendarDayOutsideText,
           ),
           const SizedBox(height: 16),
           Text(
             '暂无收藏日记',
             style: TextStyle(
               fontSize: 16,
-              color: Colors.grey[600],
+              color: colors.textMuted,
             ),
           ),
           const SizedBox(height: 8),
@@ -135,7 +138,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
             '在主页点击心形图标收藏日记',
             style: TextStyle(
               fontSize: 14,
-              color: Colors.grey[500],
+              color: colors.textSecondary,
             ),
           ),
         ],

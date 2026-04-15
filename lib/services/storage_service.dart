@@ -18,52 +18,91 @@ class StorageService {
   StorageService._internal();
 
   Future<SharedPreferences> get _prefs async => await SharedPreferences.getInstance();
+  List<DiaryEntry>? _entriesCache;
+  List<DiaryEntry>? _activeEntriesCache;
+  List<DiaryEntry>? _deletedEntriesCache;
+  List<DiaryEntry>? _favoriteEntriesCache;
+  Map<String, DiaryEntry>? _entriesByIdCache;
+  Map<int, DiaryEntry>? _entriesByDayCache;
+  Map<String, List<DiaryEntry>>? _entriesByMonthCache;
+
+  void _rebuildIndexes(List<DiaryEntry> entries) {
+    _entriesCache = List<DiaryEntry>.from(entries);
+    _entriesByIdCache = <String, DiaryEntry>{};
+    _entriesByDayCache = <int, DiaryEntry>{};
+    _entriesByMonthCache = <String, List<DiaryEntry>>{};
+    _activeEntriesCache = [];
+    _deletedEntriesCache = [];
+    _favoriteEntriesCache = [];
+
+    for (final entry in entries) {
+      _entriesByIdCache![entry.id] = entry;
+
+      if (entry.deletedAt != null) {
+        _deletedEntriesCache!.add(entry);
+        continue;
+      }
+
+      _activeEntriesCache!.add(entry);
+      if (entry.isFavorite) {
+        _favoriteEntriesCache!.add(entry);
+      }
+
+      _entriesByDayCache![_dayKey(entry.date)] = entry;
+      final monthKey = _monthKey(entry.date);
+      _entriesByMonthCache!.putIfAbsent(monthKey, () => <DiaryEntry>[]).add(entry);
+    }
+  }
 
   Future<void> _saveAllEntries(List<DiaryEntry> entries, {SharedPreferences? prefs}) async {
     final targetPrefs = prefs ?? await _prefs;
     entries.sort((a, b) => b.date.compareTo(a.date));
     final jsonList = entries.map((e) => e.toJson()).toList();
     await targetPrefs.setString(_diaryKey, jsonEncode(jsonList));
+    _rebuildIndexes(entries);
   }
 
   // 获取所有未删除的日记（正常列表）
   Future<List<DiaryEntry>> getAllEntries() async {
-    final prefs = await _prefs;
-    final String? jsonString = prefs.getString(_diaryKey);
-
-    if (jsonString == null) {
-      return [];
+    if (_activeEntriesCache != null) {
+      return List<DiaryEntry>.from(_activeEntriesCache!);
     }
-
-    try {
-      final List<dynamic> jsonList = jsonDecode(jsonString);
-      final entries = jsonList.map((json) => DiaryEntry.fromJson(json)).toList();
-      // 只返回未删除的日记
-      return entries.where((e) => e.deletedAt == null).toList();
-    } catch (e) {
-      return [];
-    }
+    await _getAllEntriesIncludingDeleted();
+    return List<DiaryEntry>.from(_activeEntriesCache ?? const <DiaryEntry>[]);
   }
 
   // 获取所有日记（包括已删除的，用于回收站）
   Future<List<DiaryEntry>> _getAllEntriesIncludingDeleted() async {
+    if (_entriesCache != null) {
+      return List<DiaryEntry>.from(_entriesCache!);
+    }
+
     final prefs = await _prefs;
     final String? jsonString = prefs.getString(_diaryKey);
 
-    if (jsonString == null) return [];
+    if (jsonString == null) {
+      _rebuildIndexes(const <DiaryEntry>[]);
+      return [];
+    }
 
     try {
       final List<dynamic> jsonList = jsonDecode(jsonString);
-      return jsonList.map((json) => DiaryEntry.fromJson(json)).toList();
+      final parsed = jsonList.map((json) => DiaryEntry.fromJson(json)).toList();
+      _rebuildIndexes(parsed);
+      return parsed;
     } catch (e) {
+      _rebuildIndexes(const <DiaryEntry>[]);
       return [];
     }
   }
 
   // 获取回收站中的日记
   Future<List<DiaryEntry>> getDeletedEntries() async {
-    final entries = await _getAllEntriesIncludingDeleted();
-    return entries.where((e) => e.deletedAt != null).toList();
+    if (_deletedEntriesCache != null) {
+      return List<DiaryEntry>.from(_deletedEntriesCache!);
+    }
+    await _getAllEntriesIncludingDeleted();
+    return List<DiaryEntry>.from(_deletedEntriesCache ?? const <DiaryEntry>[]);
   }
 
   Future<void> saveEntry(DiaryEntry entry) async {
@@ -132,25 +171,27 @@ class StorageService {
   }
 
   Future<DiaryEntry?> getEntryByDate(DateTime date) async {
-    final entries = await getAllEntries();
-    try {
-      return entries.firstWhere(
-        (e) => _isSameDay(e.date, date),
-      );
-    } catch (e) {
-      return null;
+    if (_entriesByDayCache == null) {
+      await _getAllEntriesIncludingDeleted();
     }
+    return _entriesByDayCache?[_dayKey(date)];
   }
 
   Future<List<DiaryEntry>> getEntriesByMonth(DateTime month) async {
-    final entries = await getAllEntries();
-    return entries.where((e) => 
-      e.date.year == month.year && e.date.month == month.month
-    ).toList();
+    if (_entriesByMonthCache == null) {
+      await _getAllEntriesIncludingDeleted();
+    }
+    return List<DiaryEntry>.from(
+      _entriesByMonthCache?[_monthKey(month)] ?? const <DiaryEntry>[],
+    );
   }
 
-  bool _isSameDay(DateTime a, DateTime b) {
-    return a.year == b.year && a.month == b.month && a.day == b.day;
+  int _dayKey(DateTime date) {
+    return date.year * 10000 + date.month * 100 + date.day;
+  }
+
+  String _monthKey(DateTime date) {
+    return '${date.year}-${date.month}';
   }
 
   // ========== 收藏夹功能 ==========
@@ -228,8 +269,11 @@ class StorageService {
   }
 
   Future<List<DiaryEntry>> getFavoriteEntries() async {
-    final entries = await getAllEntries();
-    return entries.where((e) => e.isFavorite).toList();
+    if (_favoriteEntriesCache != null) {
+      return List<DiaryEntry>.from(_favoriteEntriesCache!);
+    }
+    await _getAllEntriesIncludingDeleted();
+    return List<DiaryEntry>.from(_favoriteEntriesCache ?? const <DiaryEntry>[]);
   }
 
   Future<void> clearAllData() async {
@@ -239,6 +283,7 @@ class StorageService {
     await prefs.remove(_initializedKey);
     // 设置数据已清除标记，防止自动重新初始化测试数据
     await prefs.setBool(_dataClearedKey, true);
+    _rebuildIndexes(const <DiaryEntry>[]);
     
     // 清除应用目录下的图片文件夹
     try {

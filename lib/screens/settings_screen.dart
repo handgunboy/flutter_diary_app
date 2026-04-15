@@ -2,10 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
-import '../services/theme_service.dart' show ThemeService, ImageStorageMode, ThemeModeType;
+import '../services/theme_service.dart' show ThemeService;
 import '../services/storage_service.dart';
 import '../services/notification_service.dart';
+import '../theme/app_colors.dart';
+import '../widgets/app_ui.dart';
 import '../widgets/app_top_toast.dart';
+import '../widgets/settings_action_group_card.dart';
+import '../widgets/settings_ai_section.dart';
+import '../widgets/settings_storage_mode_section.dart';
+import '../widgets/settings_theme_mode_dialog.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -17,7 +23,6 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   final ThemeService _themeService = ThemeService();
   final StorageService _storageService = StorageService();
-  final TextEditingController _aiPromptController = TextEditingController();
   final TextEditingController _aiApiUrlController = TextEditingController();
   final TextEditingController _aiApiKeyController = TextEditingController();
   bool _obscureApiKey = true;
@@ -25,7 +30,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
-    _aiPromptController.text = _themeService.aiPrompt;
     _aiApiUrlController.text = _themeService.aiApiUrl;
     _aiApiKeyController.text = _themeService.aiApiKey;
     _themeService.addListener(_onThemeChanged);
@@ -34,7 +38,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void dispose() {
     _themeService.removeListener(_onThemeChanged);
-    _aiPromptController.dispose();
     _aiApiUrlController.dispose();
     _aiApiKeyController.dispose();
     super.dispose();
@@ -42,13 +45,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   void _onThemeChanged() {
     setState(() {});
-  }
-
-  Future<void> _saveAiPrompt() async {
-    await _themeService.setAiPrompt(_aiPromptController.text.trim());
-    if (mounted) {
-      AppTopToast.show(context, 'AI提示词已保存');
-    }
   }
 
   Future<void> _saveAiApiConfig() async {
@@ -100,6 +96,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         type: FileType.custom,
         allowedExtensions: ['zip'],
       );
+      if (!mounted) return;
       
       if (result != null && result.files.single.path != null) {
         // 确认导入
@@ -149,68 +146,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  String _getThemeModeText(ThemeModeType mode) {
-    switch (mode) {
-      case ThemeModeType.light:
-        return '白天模式';
-      case ThemeModeType.dark:
-        return '黑夜模式';
-      case ThemeModeType.system:
-        return '跟随系统';
-    }
-  }
-
-  IconData _getThemeModeIcon(ThemeModeType mode) {
-    switch (mode) {
-      case ThemeModeType.light:
-        return Icons.light_mode;
-      case ThemeModeType.dark:
-        return Icons.dark_mode;
-      case ThemeModeType.system:
-        return Icons.brightness_auto;
-    }
-  }
-
   void _showThemeModeDialog() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('选择主题模式'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: ThemeModeType.values.map((mode) {
-            return RadioListTile<ThemeModeType>(
-              title: Row(
-                children: [
-                  Icon(_getThemeModeIcon(mode)),
-                  const SizedBox(width: 12),
-                  Text(_getThemeModeText(mode)),
-                ],
-              ),
-              value: mode,
-              groupValue: _themeService.themeMode,
-              onChanged: (value) async {
-                if (value != null) {
-                  await _themeService.setThemeMode(value);
-                  if (mounted) {
-                    Navigator.pop(context);
-                  }
-                }
-              },
-            );
-          }).toList(),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
-          ),
-        ],
+      builder: (_) => SettingsThemeModeDialog(
+        selectedMode: _themeService.themeMode,
+        onModeSelected: (mode) => _themeService.setThemeMode(mode),
       ),
     );
   }
 
   Future<void> _clearAllData() async {
+    final colors = AppColors.of(context);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -223,7 +170,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('确定清除', style: TextStyle(color: Colors.red)),
+            child: Text('确定清除', style: TextStyle(color: colors.danger)),
           ),
         ],
       ),
@@ -231,11 +178,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     if (confirm == true) {
       await _storageService.clearAllData();
-      if (mounted) {
-        AppTopToast.show(context, '所有数据已清除');
-        // 刷新页面状态
-        setState(() {});
-      }
+      if (!mounted) return;
+      AppTopToast.show(context, '所有数据已清除');
+      // 刷新页面状态
+      setState(() {});
       // 返回 true 通知主页刷新
       Navigator.pop(context, true);
     }
@@ -243,12 +189,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     return Scaffold(
       body: SafeArea(
         child: Column(
           children: [
             Container(
-              padding: const EdgeInsets.only(left: 10, right: 10, top: 12, bottom: 12),
+              padding: AppUi.headerPadding,
               child: Row(
                 children: [
                   IconButton(
@@ -269,7 +216,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             Expanded(
               child: ListView(
-                padding: const EdgeInsets.all(16),
+                padding: AppUi.pagePadding,
                 children: [
           // 主题设置
           Card(
@@ -277,261 +224,48 @@ class _SettingsScreenState extends State<SettingsScreen> {
               children: [
                 ListTile(
                   leading: Icon(
-                    _getThemeModeIcon(_themeService.themeMode),
+                    ThemeModeUi.icon(_themeService.themeMode),
                     color: Theme.of(context).colorScheme.primary,
                   ),
                   title: const Text('主题模式'),
-                  subtitle: Text(_getThemeModeText(_themeService.themeMode)),
+                  subtitle: Text(ThemeModeUi.text(_themeService.themeMode)),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: _showThemeModeDialog,
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: AppUi.sectionGap),
 
           // 图片存储模式设置
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.image,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        '图片存储模式',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '选择日记图片的存储方式，影响导出功能',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[600],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildStorageModeOption(
-                          title: '复制到应用',
-                          subtitle: '图片复制到应用文件夹，可完整导出',
-                          icon: Icons.copy,
-                          isSelected: _themeService.imageStorageMode == ImageStorageMode.copy,
-                          onTap: () async {
-                            await _themeService.setImageStorageMode(ImageStorageMode.copy);
-                            setState(() {});
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildStorageModeOption(
-                          title: '仅引用',
-                          subtitle: '只保存图片路径，节省空间',
-                          icon: Icons.link,
-                          isSelected: _themeService.imageStorageMode == ImageStorageMode.reference,
-                          onTap: () async {
-                            await _themeService.setImageStorageMode(ImageStorageMode.reference);
-                            setState(() {});
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
+          SettingsStorageModeSection(
+            selectedMode: _themeService.imageStorageMode,
+            onModeSelected: (mode) async {
+              await _themeService.setImageStorageMode(mode);
+              if (!mounted) return;
+              setState(() {});
+            },
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: AppUi.sectionGap),
 
           // AI API 配置
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.api,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'AI API 配置',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const Spacer(),
-                      if (_themeService.hasAiConfig)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.green[100],
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.check_circle, size: 14, color: Colors.green[700]),
-                              const SizedBox(width: 4),
-                              Text(
-                                '已配置',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.green[700],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '配置 AI 服务的 API 地址和密钥，用于心情分析等功能',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[600],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _aiApiUrlController,
-                    decoration: InputDecoration(
-                      labelText: 'API 地址',
-                      hintText: '例如：https://api.openai.com/v1/chat/completions',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _aiApiKeyController,
-                    obscureText: _obscureApiKey,
-                    decoration: InputDecoration(
-                      labelText: 'API Key',
-                      hintText: '输入你的 API 密钥',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscureApiKey ? Icons.visibility_off : Icons.visibility,
-                        ),
-                        onPressed: () {
-                          setState(() {
-                            _obscureApiKey = !_obscureApiKey;
-                          });
-                        },
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: _saveAiApiConfig,
-                      icon: const Icon(Icons.save),
-                      label: const Text('保存 API 配置'),
-                    ),
-                  ),
-                  const Divider(height: 24),
-                  // AI 数据访问隐私开关
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.privacy_tip_outlined,
-                        color: Theme.of(context).colorScheme.primary,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '允许 AI 访问日记数据',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w500,
-                                color: Theme.of(context).colorScheme.onSurface,
-                              ),
-                            ),
-                            Text(
-                              '开启后，AI 可以读取您的日记内容，提供更个性化的建议',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey[600],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Switch(
-                        value: _themeService.aiDataAccess,
-                        onChanged: (value) async {
-                          await _themeService.setAiDataAccess(value);
-                          setState(() {});
-                        },
-                      ),
-                    ],
-                  ),
-                  if (_themeService.aiDataAccess) ...[
-                    const Divider(height: 24),
-                    // AI 功能说明
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(
-                          Icons.auto_awesome,
-                          color: Theme.of(context).colorScheme.primary,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'AI 可以帮您：',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w500,
-                                  color: Theme.of(context).colorScheme.onSurface,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              _buildFeatureItem('📊 心情统计', '分析一段时间的心情分布'),
-                              _buildFeatureItem('🍽️ 饮食回顾', '统计最近的饮食记录'),
-                              _buildFeatureItem('🔍 关键词搜索', '搜索包含特定内容的日记'),
-                              _buildFeatureItem('💭 心情筛选', '找出特定心情的日记'),
-                              _buildFeatureItem('📅 日期查询', '查看指定日期范围的日记'),
-                              _buildFeatureItem('📆 去年今天', '回顾去年今天的日记'),
-                              _buildFeatureItem('📝 写作建议', '根据历史日记提供写作灵感'),
-                              _buildFeatureItem('💡 智能分析', '基于数据给出生活建议'),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ],
-              ),
-            ),
+          SettingsAiSection(
+            apiUrlController: _aiApiUrlController,
+            apiKeyController: _aiApiKeyController,
+            obscureApiKey: _obscureApiKey,
+            onToggleObscureApiKey: () {
+              setState(() {
+                _obscureApiKey = !_obscureApiKey;
+              });
+            },
+            onSaveApiConfig: _saveAiApiConfig,
+            hasAiConfig: _themeService.hasAiConfig,
+            aiDataAccess: _themeService.aiDataAccess,
+            onAiDataAccessChanged: (value) async {
+              await _themeService.setAiDataAccess(value);
+              if (!mounted) return;
+              setState(() {});
+            },
           ),
           const SizedBox(height: 16),
 
@@ -592,178 +326,54 @@ class _SettingsScreenState extends State<SettingsScreen> {
           // const SizedBox(height: 16),
 
           // 数据导入导出
-          Card(
-            child: Column(
-              children: [
-                ListTile(
-                  leading: Icon(
-                    Icons.download,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                  title: const Text('导出数据'),
-                  subtitle: const Text('将日记数据和图片打包为 ZIP 文件'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: _exportData,
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: Icon(
-                    Icons.upload,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                  title: const Text('导入数据'),
-                  subtitle: const Text('从 ZIP 文件导入日记数据和图片'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: _importData,
-                ),
-              ],
-            ),
+          SettingsActionGroupCard(
+            items: [
+              SettingsActionItem(
+                icon: Icons.download,
+                title: '导出数据',
+                subtitle: '将日记数据和图片打包为 ZIP 文件',
+                onTap: _exportData,
+              ),
+              SettingsActionItem(
+                icon: Icons.upload,
+                title: '导入数据',
+                subtitle: '从 ZIP 文件导入日记数据和图片',
+                onTap: _importData,
+              ),
+            ],
           ),
           const SizedBox(height: 16),
 
           // 通知测试
-          Card(
-            child: Column(
-              children: [
-                ListTile(
-                  leading: Icon(
-                    Icons.notifications,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                  title: const Text('测试通知'),
-                  subtitle: const Text('发送一条测试通知'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: _testNotification,
-                ),
-              ],
-            ),
+          SettingsActionGroupCard(
+            items: [
+              SettingsActionItem(
+                icon: Icons.notifications,
+                title: '测试通知',
+                subtitle: '发送一条测试通知',
+                onTap: _testNotification,
+              ),
+            ],
           ),
           const SizedBox(height: 16),
 
           // 清除数据
-          Card(
-            child: Column(
-              children: [
-                ListTile(
-                  leading: Icon(
-                    Icons.delete_forever,
-                    color: Colors.red[400],
-                  ),
-                  title: const Text('清除所有数据'),
-                  subtitle: const Text('清除所有日记数据，此操作不可恢复'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: _clearAllData,
-                ),
-              ],
-            ),
+          SettingsActionGroupCard(
+            items: [
+              SettingsActionItem(
+                icon: Icons.delete_forever,
+                iconColor: colors.danger,
+                title: '清除所有数据',
+                subtitle: '清除所有日记数据，此操作不可恢复',
+                onTap: _clearAllData,
+              ),
+            ],
           ),
                 ],
               ),
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildStorageModeOption({
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required bool isSelected,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? Theme.of(context).colorScheme.primaryContainer
-              : Colors.grey[100],
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected
-                ? Theme.of(context).colorScheme.primary
-                : Colors.transparent,
-            width: 2,
-          ),
-        ),
-        child: Column(
-          children: [
-            Icon(
-              icon,
-              color: isSelected
-                  ? Theme.of(context).colorScheme.primary
-                  : Colors.grey[600],
-              size: 28,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              title,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: isSelected
-                    ? Theme.of(context).colorScheme.primary
-                    : Colors.grey[800],
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              subtitle,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 11,
-                color: Colors.grey[600],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFeatureItem(String title, String description) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '•',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.primary,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(width: 6),
-          Expanded(
-            child: RichText(
-              text: TextSpan(
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Colors.grey[700],
-                  height: 1.4,
-                ),
-                children: [
-                  TextSpan(
-                    text: title,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  TextSpan(
-                    text: ' - $description',
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

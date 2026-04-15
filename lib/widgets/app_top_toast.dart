@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 
+import '../theme/app_colors.dart';
+
 class AppTopToast {
   static OverlayEntry? _currentEntry;
   static Timer? _dismissTimer;
@@ -25,7 +27,8 @@ class AppTopToast {
     }
 
     final topPadding = MediaQuery.of(context).padding.top + 12;
-    final backgroundColor = isError ? const Color(0xFFC43C3C) : const Color(0xFF2F2F2F);
+    final colors = AppColors.of(context);
+    final backgroundColor = isError ? colors.toastErrorBackground : colors.toastBackground;
     final icon = isError ? Icons.error_outline : Icons.check_circle_outline;
 
     final entry = OverlayEntry(
@@ -44,7 +47,7 @@ class AppTopToast {
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.18),
+                    color: colors.scrim.withValues(alpha: 0.18),
                     blurRadius: 14,
                     offset: const Offset(0, 4),
                   ),
@@ -52,13 +55,13 @@ class AppTopToast {
               ),
               child: Row(
                 children: [
-                  Icon(icon, size: 18, color: Colors.white),
+                  Icon(icon, size: 18, color: colors.toastForeground),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       message,
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: colors.toastForeground,
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
                       ),

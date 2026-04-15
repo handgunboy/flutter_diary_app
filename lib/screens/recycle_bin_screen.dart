@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/diary_entry.dart';
 import '../services/storage_service.dart';
+import '../theme/app_colors.dart';
 import '../widgets/app_top_toast.dart';
 
 class RecycleBinScreen extends StatefulWidget {
@@ -32,6 +33,7 @@ class _RecycleBinScreenState extends State<RecycleBinScreen> {
   }
 
   Future<void> _restoreEntry(DiaryEntry entry) async {
+    final colors = AppColors.of(context);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -44,7 +46,7 @@ class _RecycleBinScreenState extends State<RecycleBinScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('恢复', style: TextStyle(color: Colors.green)),
+            child: Text('恢复', style: TextStyle(color: colors.success)),
           ),
         ],
       ),
@@ -62,6 +64,7 @@ class _RecycleBinScreenState extends State<RecycleBinScreen> {
   }
 
   Future<void> _permanentlyDeleteEntry(DiaryEntry entry) async {
+    final colors = AppColors.of(context);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -74,7 +77,7 @@ class _RecycleBinScreenState extends State<RecycleBinScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('删除', style: TextStyle(color: Colors.red)),
+            child: Text('删除', style: TextStyle(color: colors.danger)),
           ),
         ],
       ),
@@ -92,6 +95,7 @@ class _RecycleBinScreenState extends State<RecycleBinScreen> {
   Future<void> _emptyRecycleBin() async {
     if (_deletedEntries.isEmpty) return;
 
+    final colors = AppColors.of(context);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -104,7 +108,7 @@ class _RecycleBinScreenState extends State<RecycleBinScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('清空', style: TextStyle(color: Colors.red)),
+            child: Text('清空', style: TextStyle(color: colors.danger)),
           ),
         ],
       ),
@@ -131,6 +135,7 @@ class _RecycleBinScreenState extends State<RecycleBinScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     return Scaffold(
       appBar: AppBar(
         title: const Text('回收站'),
@@ -141,7 +146,7 @@ class _RecycleBinScreenState extends State<RecycleBinScreen> {
               icon: const Icon(Icons.delete_forever, size: 20),
               label: const Text('清空'),
               style: TextButton.styleFrom(
-                foregroundColor: Colors.red,
+                foregroundColor: colors.danger,
               ),
             ),
         ],
@@ -155,6 +160,7 @@ class _RecycleBinScreenState extends State<RecycleBinScreen> {
   }
 
   Widget _buildEmptyState() {
+    final colors = AppColors.of(context);
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -162,14 +168,14 @@ class _RecycleBinScreenState extends State<RecycleBinScreen> {
           Icon(
             Icons.delete_outline,
             size: 64,
-            color: Colors.grey[400],
+            color: colors.calendarDayOutsideText,
           ),
           const SizedBox(height: 16),
           Text(
             '回收站是空的',
             style: TextStyle(
               fontSize: 16,
-              color: Colors.grey[600],
+              color: colors.textMuted,
             ),
           ),
           const SizedBox(height: 8),
@@ -177,7 +183,7 @@ class _RecycleBinScreenState extends State<RecycleBinScreen> {
             '删除的日记会在这里保留30天',
             style: TextStyle(
               fontSize: 14,
-              color: Colors.grey[500],
+              color: colors.textSecondary,
             ),
           ),
         ],
@@ -197,6 +203,7 @@ class _RecycleBinScreenState extends State<RecycleBinScreen> {
   }
 
   Widget _buildDeletedCard(DiaryEntry entry) {
+    final colors = AppColors.of(context);
     return Card(
       elevation: 0,
       margin: const EdgeInsets.only(bottom: 12),
@@ -221,14 +228,14 @@ class _RecycleBinScreenState extends State<RecycleBinScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.orange[100],
+                    color: colors.warningBackground,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
                     _getRemainingDays(entry),
                     style: TextStyle(
                       fontSize: 12,
-                      color: Colors.orange[800],
+                      color: colors.warning,
                     ),
                   ),
                 ),
@@ -241,29 +248,29 @@ class _RecycleBinScreenState extends State<RecycleBinScreen> {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: 14,
-                color: Colors.grey[600],
+                color: colors.textMuted,
               ),
             ),
             const SizedBox(height: 8),
             Row(
               children: [
-                Icon(Icons.calendar_today, size: 14, color: Colors.grey[500]),
+                Icon(Icons.calendar_today, size: 14, color: colors.textSecondary),
                 const SizedBox(width: 4),
                 Text(
                   DateFormat('yyyy-MM-dd').format(entry.date),
                   style: TextStyle(
                     fontSize: 12,
-                    color: Colors.grey[500],
+                    color: colors.textSecondary,
                   ),
                 ),
                 const SizedBox(width: 16),
-                Icon(Icons.delete, size: 14, color: Colors.grey[500]),
+                Icon(Icons.delete, size: 14, color: colors.textSecondary),
                 const SizedBox(width: 4),
                 Text(
                   '删除于 ${DateFormat('MM-dd HH:mm').format(entry.deletedAt!)}',
                   style: TextStyle(
                     fontSize: 12,
-                    color: Colors.grey[500],
+                    color: colors.textSecondary,
                   ),
                 ),
               ],
@@ -277,7 +284,7 @@ class _RecycleBinScreenState extends State<RecycleBinScreen> {
                   icon: const Icon(Icons.restore, size: 18),
                   label: const Text('恢复'),
                   style: TextButton.styleFrom(
-                    foregroundColor: Colors.green,
+                    foregroundColor: colors.success,
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -286,7 +293,7 @@ class _RecycleBinScreenState extends State<RecycleBinScreen> {
                   icon: const Icon(Icons.delete_forever, size: 18),
                   label: const Text('彻底删除'),
                   style: TextButton.styleFrom(
-                    foregroundColor: Colors.red,
+                    foregroundColor: colors.danger,
                   ),
                 ),
               ],
