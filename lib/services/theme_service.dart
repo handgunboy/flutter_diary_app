@@ -67,6 +67,16 @@ class ThemeService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 循环切换主题模式：system -> light -> dark -> system
+  Future<void> cycleThemeMode() async {
+    final next = switch (_themeMode) {
+      ThemeModeType.system => ThemeModeType.light,
+      ThemeModeType.light => ThemeModeType.dark,
+      ThemeModeType.dark => ThemeModeType.system,
+    };
+    await setThemeMode(next);
+  }
+
   Future<void> setAiPrompt(String prompt) async {
     _aiPrompt = prompt;
     final prefs = await SharedPreferences.getInstance();

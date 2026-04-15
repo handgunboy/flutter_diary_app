@@ -4,8 +4,10 @@ import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:langchain/langchain.dart';
 import 'package:langchain_openai/langchain_openai.dart';
+
 import 'theme_service.dart';
 import 'storage_service.dart';
+import 'diary_query_service.dart';
 import 'local_rag_service.dart';
 import '../models/diary_entry.dart';
 
@@ -23,6 +25,7 @@ class LangChainService {
 
   final ThemeService _themeService = ThemeService();
   final StorageService _storageService = StorageService();
+  final DiaryQueryService _diaryQueryService = DiaryQueryService(StorageService());
   final LocalRagService _localRagService = LocalRagService();
 
   // LLM 实例
@@ -73,7 +76,7 @@ class LangChainService {
         name: 'getCurrentMonthDiaries',
         description: '获取当前月份的所有日记记录',
         inputJsonSchema: {'type': 'object', 'properties': {}},
-        func: (_) async => await _getCurrentMonthDiaries(),
+        func: (_) async => await _diaryQueryService.getCurrentMonthDiaries(),
       ),
       // 获取最近 N 天日记
       Tool.fromFunction(
@@ -89,7 +92,7 @@ class LangChainService {
         func: (input) async {
           final inputMap = input as Map<String, dynamic>;
           final days = (inputMap['days'] as num?)?.toInt() ?? 7;
-          return await _getRecentDiaries(days);
+          return await _diaryQueryService.getRecentDiaries(days);
         },
       ),
       // 按日期范围查询
@@ -108,7 +111,7 @@ class LangChainService {
           final inputMap = input as Map<String, dynamic>;
           final startDate = DateTime.parse(inputMap['startDate'] as String);
           final endDate = DateTime.parse(inputMap['endDate'] as String);
-          return await _getDiariesByDateRange(startDate, endDate);
+          return await _diaryQueryService.getDiariesByDateRange(startDate, endDate);
         },
       ),
       // 按心情筛选
@@ -125,7 +128,7 @@ class LangChainService {
         func: (input) async {
           final inputMap = input as Map<String, dynamic>;
           final mood = inputMap['mood'] as String? ?? '';
-          return await _getDiariesByMood(mood);
+          return await _diaryQueryService.getDiariesByMood(mood);
         },
       ),
       // 关键词搜索
@@ -142,7 +145,7 @@ class LangChainService {
         func: (input) async {
           final inputMap = input as Map<String, dynamic>;
           final keyword = inputMap['keyword'] as String? ?? '';
-          return await _searchDiaries(keyword);
+          return await _diaryQueryService.searchDiaries(keyword);
         },
       ),
       // 心情统计
@@ -159,7 +162,7 @@ class LangChainService {
         func: (input) async {
           final inputMap = input as Map<String, dynamic>;
           final days = (inputMap['days'] as num?)?.toInt() ?? 7;
-          return await _getMoodStats(days);
+          return await _diaryQueryService.getMoodStats(days);
         },
       ),
       // 饮食统计
@@ -176,7 +179,7 @@ class LangChainService {
         func: (input) async {
           final inputMap = input as Map<String, dynamic>;
           final days = (inputMap['days'] as num?)?.toInt() ?? 7;
-          return await _getDietStats(days);
+          return await _diaryQueryService.getDietStats(days);
         },
       ),
       // 去年今天
@@ -184,7 +187,7 @@ class LangChainService {
         name: 'getDiaryOnSameDayLastYear',
         description: '获取去年今天的日记记录',
         inputJsonSchema: {'type': 'object', 'properties': {}},
-        func: (_) async => await _getDiaryOnSameDayLastYear(),
+        func: (_) async => await _diaryQueryService.getDiaryOnSameDayLastYear(),
       ),
     ];
   }
@@ -298,15 +301,7 @@ ${context.isNotEmpty && context != '没有找到相关的日记记录。' ? '以
       return;
     }
 
-    if (_llm == null) {
-      _initLLM();
-    }
-
-    if (_llm == null) {
-      throw Exception('LLM 初始化失败');
-    }
-
-    // 先尝试用 BM25 搜索相关日记作为上下文
+    // 使用本地 RAG 检索相关内容
     final context = await _localRagService.generateRagContext(message, topK: topK);
 
     // 获取当前时间
@@ -315,18 +310,27 @@ ${context.isNotEmpty && context != '没有找到相关的日记记录。' ? '以
 
     // 构建系统提示词
     String systemPrompt = '''你是"小坡"，一款日记应用中的智能 AI 助手。
-
-**当前时间：$currentTimeStr**
+当前时间：$currentTimeStr
 
 ${context.isNotEmpty && context != '没有找到相关的日记记录。' ? '以下是通过本地检索找到的日记内容，你可以参考：\n$context\n' : ''}
 
-## 你的能力：
-1. **日记分析**：帮助用户分析日记内容，提取关键信息
-2. **数据查询**：通过工具函数查询用户的日记数据
-3. **心情陪伴**：倾听用户的烦恼，提供情感支持
+## 你的职责
+你是一个温暖的日记伙伴，帮助用户记录、回顾和分析他们的日常生活。
 
-## 你可以使用的数据查询工具：
-- **getCurrentMonthDiaries**：获取当前月份的所有日记
+## 你能做什么
+1. **日记查询**：通过工具查询用户的日记数据
+2. **日记分析**：帮用户总结日记内容
+3. **写作陪伴**：提供写作灵感
+4. **心情倾听**：给予温暖的回应
+
+## 你不能做什么（重要）
+- 你**不是**百科全书，不是搜索引擎
+- 如果用户问了与日记、心情、日常生活记录**无关**的问题，请**委婉地表示不擅长**，例如："这个问题超出了我的能力范围呢，我主要是陪你记录生活的小伙伴～"
+- **不要主动报时**，除非用户明确问了"现在几点"、"今天星期几"等问题
+- **回复要简短**，一般 1-3 句话即可
+
+## 你可以使用的查询工具
+- **getCurrentMonthDiaries**：获取当前月份的日记
 - **getRecentDiaries**：获取最近N天的日记（参数：days）
 - **getDiariesByDateRange**：获取指定日期范围的日记（参数：startDate, endDate，格式yyyy-MM-dd）
 - **getDiariesByMood**：按心情筛选日记（参数：mood）
@@ -335,134 +339,40 @@ ${context.isNotEmpty && context != '没有找到相关的日记记录。' ? '以
 - **getDietStats**：统计最近N天的饮食记录（参数：days）
 - **getDiaryOnSameDayLastYear**：获取去年今天的日记
 
-## 使用说明：
-- 当用户询问日记相关内容时，自动调用合适的工具获取数据
-- 调用工具时必须提供所有必需的参数
+## 工具调用规则
+- 用户问日记相关内容时，自动调用合适的工具
 - 日期格式必须是 yyyy-MM-dd
 
-## 你的性格：
-- 友好、温暖、有耐心
-- 回复简洁明了，适当使用 emoji
+## 你的性格
+- 友好、温暖、像朋友一样
+- 回复简短自然，像聊天一样
+- 适当用 emoji，不要过度
 
-现在，请帮助用户吧！''';
+现在，开始帮助用户吧！''';
 
     developer.log('🔍 RAG 流式问答 - Query: $message', name: 'LangChainService');
 
-    // 使用 AIService 的流式 Function Calling
+    // 使用真正的 SSE 流式 Function Calling
     final tools = _createToolsForRAG();
     final messageHistory = [
       {'role': 'system', 'content': systemPrompt},
       {'role': 'user', 'content': message},
     ];
 
-    // 调用流式 Function Calling
     yield* _chatStreamWithFunctions(messageHistory, tools);
   }
 
   /// 为 RAG 创建工具列表
   List<Map<String, dynamic>> _createToolsForRAG() {
     return [
-      {
-        'type': 'function',
-        'function': {
-          'name': 'getCurrentMonthDiaries',
-          'description': '获取当前月份的所有日记记录',
-          'parameters': {'type': 'object', 'properties': {}},
-        },
-      },
-      {
-        'type': 'function',
-        'function': {
-          'name': 'getRecentDiaries',
-          'description': '获取最近N天的日记记录',
-          'parameters': {
-            'type': 'object',
-            'properties': {
-              'days': {'type': 'integer', 'description': '要获取最近多少天的日记'},
-            },
-            'required': ['days'],
-          },
-        },
-      },
-      {
-        'type': 'function',
-        'function': {
-          'name': 'getDiariesByDateRange',
-          'description': '获取指定日期范围内的日记记录',
-          'parameters': {
-            'type': 'object',
-            'properties': {
-              'startDate': {'type': 'string', 'description': '开始日期，格式yyyy-MM-dd'},
-              'endDate': {'type': 'string', 'description': '结束日期，格式yyyy-MM-dd'},
-            },
-            'required': ['startDate', 'endDate'],
-          },
-        },
-      },
-      {
-        'type': 'function',
-        'function': {
-          'name': 'getDiariesByMood',
-          'description': '按心情筛选日记记录',
-          'parameters': {
-            'type': 'object',
-            'properties': {
-              'mood': {'type': 'string', 'description': '要筛选的心情'},
-            },
-            'required': ['mood'],
-          },
-        },
-      },
-      {
-        'type': 'function',
-        'function': {
-          'name': 'searchDiaries',
-          'description': '按关键词搜索日记内容',
-          'parameters': {
-            'type': 'object',
-            'properties': {
-              'keyword': {'type': 'string', 'description': '要搜索的关键词'},
-            },
-            'required': ['keyword'],
-          },
-        },
-      },
-      {
-        'type': 'function',
-        'function': {
-          'name': 'getMoodStats',
-          'description': '统计最近N天的心情分布',
-          'parameters': {
-            'type': 'object',
-            'properties': {
-              'days': {'type': 'integer', 'description': '要统计最近多少天'},
-            },
-            'required': ['days'],
-          },
-        },
-      },
-      {
-        'type': 'function',
-        'function': {
-          'name': 'getDietStats',
-          'description': '统计最近N天的饮食记录',
-          'parameters': {
-            'type': 'object',
-            'properties': {
-              'days': {'type': 'integer', 'description': '要统计最近多少天'},
-            },
-            'required': ['days'],
-          },
-        },
-      },
-      {
-        'type': 'function',
-        'function': {
-          'name': 'getDiaryOnSameDayLastYear',
-          'description': '获取去年今天的日记记录',
-          'parameters': {'type': 'object', 'properties': {}},
-        },
-      },
+      {'type': 'function', 'function': {'name': 'getCurrentMonthDiaries', 'description': '获取当前月份的所有日记记录', 'parameters': {'type': 'object', 'properties': {}}}},
+      {'type': 'function', 'function': {'name': 'getRecentDiaries', 'description': '获取最近N天的日记记录', 'parameters': {'type': 'object', 'properties': {'days': {'type': 'integer', 'description': '要获取最近多少天的日记'}}, 'required': ['days']}}},
+      {'type': 'function', 'function': {'name': 'getDiariesByDateRange', 'description': '获取指定日期范围内的日记记录', 'parameters': {'type': 'object', 'properties': {'startDate': {'type': 'string', 'description': '开始日期，格式yyyy-MM-dd'}, 'endDate': {'type': 'string', 'description': '结束日期，格式yyyy-MM-dd'}}, 'required': ['startDate', 'endDate']}}},
+      {'type': 'function', 'function': {'name': 'getDiariesByMood', 'description': '按心情筛选日记记录', 'parameters': {'type': 'object', 'properties': {'mood': {'type': 'string', 'description': '要筛选的心情'}}, 'required': ['mood']}}},
+      {'type': 'function', 'function': {'name': 'searchDiaries', 'description': '按关键词搜索日记内容', 'parameters': {'type': 'object', 'properties': {'keyword': {'type': 'string', 'description': '要搜索的关键词'}}, 'required': ['keyword']}}},
+      {'type': 'function', 'function': {'name': 'getMoodStats', 'description': '统计最近N天的心情分布', 'parameters': {'type': 'object', 'properties': {'days': {'type': 'integer', 'description': '要统计最近多少天'}}, 'required': ['days']}}},
+      {'type': 'function', 'function': {'name': 'getDietStats', 'description': '统计最近N天的饮食记录', 'parameters': {'type': 'object', 'properties': {'days': {'type': 'integer', 'description': '要统计最近多少天'}}, 'required': ['days']}}},
+      {'type': 'function', 'function': {'name': 'getDiaryOnSameDayLastYear', 'description': '获取去年今天的日记记录', 'parameters': {'type': 'object', 'properties': {}}}},
     ];
   }
 
@@ -475,34 +385,24 @@ ${context.isNotEmpty && context != '没有找到相关的日记记录。' ? '以
 
   Map<String, dynamic>? _tryParseToolArguments(String rawArguments) {
     final trimmed = rawArguments.trim();
-    if (trimmed.isEmpty) {
-      return <String, dynamic>{};
-    }
-
+    if (trimmed.isEmpty) return <String, dynamic>{};
     final decoded = jsonDecode(trimmed);
-    if (decoded is Map<String, dynamic>) {
-      return decoded;
-    }
-    if (decoded is Map) {
-      return decoded.cast<String, dynamic>();
-    }
+    if (decoded is Map<String, dynamic>) return decoded;
+    if (decoded is Map) return decoded.cast<String, dynamic>();
     return null;
   }
 
-  /// 流式 Function Calling 实现
+  /// 流式 Function Calling 实现（真正的 SSE 流）
   Stream<String> _chatStreamWithFunctions(
     List<Map<String, dynamic>> messages,
     List<Map<String, dynamic>> tools,
   ) async* {
     final apiKey = _themeService.aiApiKey;
     final url = _themeService.aiApiUrl;
-
-    // 处理 URL
     String finalUrl = url;
     if (!url.endsWith('/v1/chat/completions')) {
       finalUrl = url.endsWith('/') ? '${url}v1/chat/completions' : '$url/v1/chat/completions';
     }
-
     final isDeepSeek = url.contains('deepseek');
     final model = isDeepSeek ? 'deepseek-chat' : 'gpt-3.5-turbo';
 
@@ -514,7 +414,6 @@ ${context.isNotEmpty && context != '没有找到相关的日记记录。' ? '以
         'Authorization': 'Bearer $apiKey',
         'Accept': 'text/event-stream',
       });
-
       request.body = jsonEncode({
         'model': model,
         'messages': messages,
@@ -525,7 +424,6 @@ ${context.isNotEmpty && context != '没有找到相关的日记记录。' ? '以
       });
 
       final response = await client.send(request);
-
       if (response.statusCode == 200) {
         StringBuffer buffer = StringBuffer();
         String? functionName;
@@ -541,88 +439,64 @@ ${context.isNotEmpty && context != '没有找到相关的日记记录。' ? '以
               if (data == '[DONE]') {
                 if (functionName != null && functionArguments == null) {
                   try {
-                    functionArguments = _tryParseToolArguments(
-                      functionArgumentsBuffer.toString(),
-                    );
+                    functionArguments = _tryParseToolArguments(functionArgumentsBuffer.toString());
                   } catch (_) {
                     yield '\n查询数据时出错: 工具参数解析失败';
                     return;
                   }
                 }
-
-                // 检查是否有函数调用
                 if (functionName != null && functionArguments != null) {
                   yield '\n\n[正在查询数据...]\n';
-                  final result = await _executeFunction(functionName, functionArguments);
-
-                  // 将结果发送给 AI 生成最终回复
-                  final functionMessages = [...messages];
-                  final toolCallId = 'call_${DateTime.now().millisecondsSinceEpoch}';
-                  functionMessages.add({
-                    'role': 'assistant',
-                    'content': null,
-                    'tool_calls': [
-                      {
+                  try {
+                    final result = await _executeFunction(functionName, functionArguments);
+                    final functionMessages = [...messages];
+                    final toolCallId = 'call_${DateTime.now().millisecondsSinceEpoch}';
+                    functionMessages.add({
+                      'role': 'assistant',
+                      'content': null,
+                      'tool_calls': [{
                         'id': toolCallId,
                         'type': 'function',
-                        'function': {
-                          'name': functionName,
-                          'arguments': jsonEncode(functionArguments),
-                        },
-                      },
-                    ],
-                  });
-                  functionMessages.add({
-                    'role': 'tool',
-                    'tool_call_id': toolCallId,
-                    'content': result,
-                  });
-
-                  yield* _continueChatStream(functionMessages);
+                        'function': {'name': functionName, 'arguments': jsonEncode(functionArguments)},
+                      }],
+                    });
+                    functionMessages.add({
+                      'role': 'tool',
+                      'tool_call_id': toolCallId,
+                      'content': result,
+                    });
+                    yield* _continueChatStream(functionMessages);
+                  } catch (e) {
+                    yield '\n查询数据时出错: $e';
+                  }
                 }
                 return;
               }
-
               try {
                 final jsonData = jsonDecode(data);
                 final delta = jsonData['choices']?[0]?['delta'];
                 final toolCalls = delta?['tool_calls'];
-
-                // 检测函数调用开始
                 if (toolCalls != null && toolCalls is List && toolCalls.isNotEmpty) {
                   isCollectingFunction = true;
                   final toolCall = toolCalls[0];
                   if (toolCall['function'] != null) {
                     functionName = toolCall['function']['name'] ?? functionName;
                     final args = toolCall['function']['arguments'];
-                    if (args != null && args is String) {
-                      if (args.isNotEmpty) {
-                        functionArgumentsBuffer.write(args);
-                      }
-
+                    if (args != null && args is String && args.isNotEmpty) {
+                      functionArgumentsBuffer.write(args);
                       try {
-                        final parsed = _tryParseToolArguments(
-                          functionArgumentsBuffer.toString(),
-                        );
-                        if (parsed != null) {
-                          functionArguments = parsed;
-                        }
-                      } catch (e) {
-                        // 参数可能不完整，继续收集
-                      }
+                        final parsed = _tryParseToolArguments(functionArgumentsBuffer.toString());
+                        if (parsed != null) functionArguments = parsed;
+                      } catch (_) {}
                     }
                   }
                 }
-
-                // 普通文本输出
                 final content = delta?['content'];
                 if (content != null && !isCollectingFunction) {
                   buffer.write(content);
                   yield content;
                 }
-              } catch (e) {
-                // 忽略解析错误
-              }
+              } catch (_) {}
             }
           }
         }
@@ -638,12 +512,10 @@ ${context.isNotEmpty && context != '没有找到相关的日记记录。' ? '以
   Stream<String> _continueChatStream(List<Map<String, dynamic>> messages) async* {
     final apiKey = _themeService.aiApiKey;
     final url = _themeService.aiApiUrl;
-
     String finalUrl = url;
     if (!url.endsWith('/v1/chat/completions')) {
       finalUrl = url.endsWith('/') ? '${url}v1/chat/completions' : '$url/v1/chat/completions';
     }
-
     final isDeepSeek = url.contains('deepseek');
     final model = isDeepSeek ? 'deepseek-chat' : 'gpt-3.5-turbo';
 
@@ -655,7 +527,6 @@ ${context.isNotEmpty && context != '没有找到相关的日记记录。' ? '以
         'Authorization': 'Bearer $apiKey',
         'Accept': 'text/event-stream',
       });
-
       request.body = jsonEncode({
         'model': model,
         'messages': messages,
@@ -664,7 +535,6 @@ ${context.isNotEmpty && context != '没有找到相关的日记记录。' ? '以
       });
 
       final response = await client.send(request);
-
       if (response.statusCode == 200) {
         await for (final chunk in response.stream.transform(utf8.decoder)) {
           final lines = chunk.split('\n');
@@ -672,16 +542,11 @@ ${context.isNotEmpty && context != '没有找到相关的日记记录。' ? '以
             if (line.startsWith('data: ')) {
               final data = line.substring(6);
               if (data == '[DONE]') return;
-
               try {
                 final jsonData = jsonDecode(data);
                 final content = jsonData['choices']?[0]?['delta']?['content'];
-                if (content != null) {
-                  yield content;
-                }
-              } catch (e) {
-                // 忽略解析错误
-              }
+                if (content != null) yield content;
+              } catch (_) {}
             }
           }
         }
@@ -694,204 +559,24 @@ ${context.isNotEmpty && context != '没有找到相关的日记记录。' ? '以
   /// 执行函数调用
   Future<String> _executeFunction(String functionName, Map<String, dynamic> arguments) async {
     developer.log('🎯 执行函数: $functionName, 参数: $arguments', name: 'LangChainService');
-
     try {
       switch (functionName) {
-        case 'getCurrentMonthDiaries':
-          return await _getCurrentMonthDiaries();
-        case 'getRecentDiaries':
-          final days = _asInt(arguments['days']);
-          return await _getRecentDiaries(days);
+        case 'getCurrentMonthDiaries': return await _diaryQueryService.getCurrentMonthDiaries();
+        case 'getRecentDiaries': return await _diaryQueryService.getRecentDiaries(_asInt(arguments['days']));
         case 'getDiariesByDateRange':
-          final startDate = DateTime.parse(arguments['startDate'] as String);
-          final endDate = DateTime.parse(arguments['endDate'] as String);
-          return await _getDiariesByDateRange(startDate, endDate);
-        case 'getDiariesByMood':
-          final mood = arguments['mood'] as String? ?? '';
-          return await _getDiariesByMood(mood);
-        case 'searchDiaries':
-          final keyword = arguments['keyword'] as String? ?? '';
-          return await _searchDiaries(keyword);
-        case 'getMoodStats':
-          final days = _asInt(arguments['days']);
-          return await _getMoodStats(days);
-        case 'getDietStats':
-          final days = _asInt(arguments['days']);
-          return await _getDietStats(days);
-        case 'getDiaryOnSameDayLastYear':
-          return await _getDiaryOnSameDayLastYear();
-        default:
-          throw Exception('未知的函数: $functionName');
+          return await _diaryQueryService.getDiariesByDateRange(
+            DateTime.parse(arguments['startDate'] as String),
+            DateTime.parse(arguments['endDate'] as String),
+          );
+        case 'getDiariesByMood': return await _diaryQueryService.getDiariesByMood(arguments['mood'] as String? ?? '');
+        case 'searchDiaries': return await _diaryQueryService.searchDiaries(arguments['keyword'] as String? ?? '');
+        case 'getMoodStats': return await _diaryQueryService.getMoodStats(_asInt(arguments['days']));
+        case 'getDietStats': return await _diaryQueryService.getDietStats(_asInt(arguments['days']));
+        case 'getDiaryOnSameDayLastYear': return await _diaryQueryService.getDiaryOnSameDayLastYear();
+        default: throw Exception('未知的函数: $functionName');
       }
     } catch (e) {
-      developer.log('❌ 函数执行失败: $e', name: 'LangChainService');
       return '查询失败: $e';
-    }
-  }
-
-  // ========== 数据查询方法 ==========
-
-  Future<String> _getCurrentMonthDiaries() async {
-    final now = DateTime.now();
-    final entries = await _storageService.getAllEntries();
-    final monthEntries = entries.where((e) => e.date.year == now.year && e.date.month == now.month).toList()
-      ..sort((a, b) => a.date.compareTo(b.date));
-
-    if (monthEntries.isEmpty) return '本月暂无日记记录';
-
-    final buffer = StringBuffer();
-    buffer.writeln('本月日记（${now.year}年${now.month}月）：');
-    for (final entry in monthEntries) {
-      buffer.writeln('--- ${entry.date.toString().split(' ')[0]} ---');
-      if (entry.mood != null) buffer.writeln('心情：${entry.mood}');
-      if (entry.weather != null) buffer.writeln('天气：${entry.weather}');
-      if (entry.breakfast != null) buffer.writeln('早餐：${entry.breakfast}');
-      if (entry.lunch != null) buffer.writeln('午餐：${entry.lunch}');
-      if (entry.dinner != null) buffer.writeln('晚餐：${entry.dinner}');
-      if (entry.content.isNotEmpty) buffer.writeln('内容：${entry.content}');
-      buffer.writeln('');
-    }
-    return buffer.toString();
-  }
-
-  Future<String> _getRecentDiaries(int days) async {
-    final now = DateTime.now();
-    final startDate = now.subtract(Duration(days: days));
-    final entries = await _storageService.getAllEntries();
-    final filtered = entries.where((e) => e.date.isAfter(startDate)).toList()
-      ..sort((a, b) => b.date.compareTo(a.date));
-
-    if (filtered.isEmpty) return '最近 $days 天暂无日记记录';
-
-    final buffer = StringBuffer();
-    buffer.writeln('最近 $days 天的日记：');
-    for (final entry in filtered) {
-      buffer.writeln('--- ${entry.date.toString().split(' ')[0]} ---');
-      if (entry.mood != null) buffer.writeln('心情：${entry.mood}');
-      if (entry.content.isNotEmpty) buffer.writeln('内容：${entry.content}');
-      buffer.writeln('');
-    }
-    return buffer.toString();
-  }
-
-  Future<String> _getDiariesByDateRange(DateTime start, DateTime end) async {
-    final entries = await _storageService.getAllEntries();
-    final filtered = entries.where((e) {
-      final date = DateTime(e.date.year, e.date.month, e.date.day);
-      final startDate = DateTime(start.year, start.month, start.day);
-      final endDate = DateTime(end.year, end.month, end.day);
-      return !date.isBefore(startDate) && !date.isAfter(endDate);
-    }).toList()..sort((a, b) => a.date.compareTo(b.date));
-
-    if (filtered.isEmpty) return '${start.toString().split(' ')[0]} 至 ${end.toString().split(' ')[0]} 暂无日记';
-
-    final buffer = StringBuffer();
-    buffer.writeln('${start.toString().split(' ')[0]} 至 ${end.toString().split(' ')[0]} 的日记：');
-    for (final entry in filtered) {
-      buffer.writeln('--- ${entry.date.toString().split(' ')[0]} ---');
-      if (entry.mood != null) buffer.writeln('心情：${entry.mood}');
-      if (entry.breakfast != null) buffer.writeln('早餐：${entry.breakfast}');
-      if (entry.lunch != null) buffer.writeln('午餐：${entry.lunch}');
-      if (entry.dinner != null) buffer.writeln('晚餐：${entry.dinner}');
-      if (entry.content.isNotEmpty) buffer.writeln('内容：${entry.content}');
-      buffer.writeln('');
-    }
-    return buffer.toString();
-  }
-
-  Future<String> _getDiariesByMood(String mood) async {
-    final entries = await _storageService.getAllEntries();
-    final filtered = entries.where((e) => e.mood?.toLowerCase().contains(mood.toLowerCase()) ?? false).toList()
-      ..sort((a, b) => b.date.compareTo(a.date));
-
-    if (filtered.isEmpty) return '没有找到心情为"$mood"的日记';
-
-    final buffer = StringBuffer();
-    buffer.writeln('心情为"$mood"的日记：');
-    for (final entry in filtered.take(10)) {
-      buffer.writeln('--- ${entry.date.toString().split(' ')[0]} ---');
-      if (entry.content.isNotEmpty) buffer.writeln('内容：${entry.content}');
-      buffer.writeln('');
-    }
-    return buffer.toString();
-  }
-
-  Future<String> _searchDiaries(String keyword) async {
-    final entries = await _storageService.getAllEntries();
-    final filtered = entries.where((e) {
-      final text = '${e.title} ${e.content} ${e.mood ?? ''} ${e.weather ?? ''} ${e.breakfast ?? ''} ${e.lunch ?? ''} ${e.dinner ?? ''}';
-      return text.toLowerCase().contains(keyword.toLowerCase());
-    }).toList()..sort((a, b) => b.date.compareTo(a.date));
-
-    if (filtered.isEmpty) return '没有找到包含"$keyword"的日记';
-
-    final buffer = StringBuffer();
-    buffer.writeln('包含"$keyword"的日记：');
-    for (final entry in filtered.take(10)) {
-      buffer.writeln('--- ${entry.date.toString().split(' ')[0]} ---');
-      if (entry.content.isNotEmpty) buffer.writeln('内容：${entry.content}');
-      buffer.writeln('');
-    }
-    return buffer.toString();
-  }
-
-  Future<String> _getMoodStats(int days) async {
-    final now = DateTime.now();
-    final startDate = now.subtract(Duration(days: days));
-    final entries = await _storageService.getAllEntries();
-    final filtered = entries.where((e) => e.date.isAfter(startDate)).toList();
-
-    if (filtered.isEmpty) return '最近 $days 天暂无日记记录';
-
-    final moodCounts = <String, int>{};
-    for (final e in filtered) {
-      if (e.mood != null) moodCounts[e.mood!] = (moodCounts[e.mood!] ?? 0) + 1;
-    }
-
-    final buffer = StringBuffer();
-    buffer.writeln('最近 $days 天的心情统计：');
-    final sorted = moodCounts.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
-    for (final e in sorted) {
-      buffer.writeln('${e.key}：${e.value} 天');
-    }
-    return buffer.toString();
-  }
-
-  Future<String> _getDietStats(int days) async {
-    final now = DateTime.now();
-    final startDate = now.subtract(Duration(days: days));
-    final entries = await _storageService.getAllEntries();
-    final filtered = entries.where((e) => e.date.isAfter(startDate)).toList();
-
-    if (filtered.isEmpty) return '最近 $days 天暂无日记记录';
-
-    int breakfast = 0, lunch = 0, dinner = 0;
-    for (final e in filtered) {
-      if (e.breakfast != null && e.breakfast!.isNotEmpty) breakfast++;
-      if (e.lunch != null && e.lunch!.isNotEmpty) lunch++;
-      if (e.dinner != null && e.dinner!.isNotEmpty) dinner++;
-    }
-
-    return '最近 $days 天饮食记录：\n早餐：$breakfast 天\n午餐：$lunch 天\n晚餐：$dinner 天';
-  }
-
-  Future<String> _getDiaryOnSameDayLastYear() async {
-    final now = DateTime.now();
-    final lastYear = DateTime(now.year - 1, now.month, now.day);
-    final entries = await _storageService.getAllEntries();
-
-    try {
-      final entry = entries.firstWhere(
-        (e) => e.date.year == lastYear.year && e.date.month == lastYear.month && e.date.day == lastYear.day,
-      );
-
-      final buffer = StringBuffer();
-      buffer.writeln('去年今天（${lastYear.toString().split(' ')[0]}）的日记：');
-      if (entry.mood != null) buffer.writeln('心情：${entry.mood}');
-      if (entry.content.isNotEmpty) buffer.writeln('内容：${entry.content}');
-      return buffer.toString();
-    } catch (e) {
-      return '去年今天（${lastYear.toString().split(' ')[0]}）没有日记记录';
     }
   }
 

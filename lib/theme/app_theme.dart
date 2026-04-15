@@ -15,9 +15,17 @@ class AppTheme {
       ).copyWith(
         surface: colors.surface,
         onSurface: colors.textPrimary,
+        surfaceTint: Colors.transparent,
       ),
       useMaterial3: true,
       extensions: [colors],
+      appBarTheme: AppBarTheme(
+        backgroundColor: colors.surface,
+        foregroundColor: colors.textPrimary,
+        elevation: 4,
+        shadowColor: colors.shadowSoft,
+        surfaceTintColor: Colors.transparent,
+      ),
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: {
           TargetPlatform.android: CupertinoPageTransitionsBuilder(),
@@ -75,6 +83,13 @@ class AppTheme {
       ),
       useMaterial3: true,
       extensions: [colors],
+      appBarTheme: AppBarTheme(
+        backgroundColor: colors.surface,
+        foregroundColor: colors.textPrimary,
+        elevation: 4,
+        shadowColor: colors.shadowSoft,
+        surfaceTintColor: Colors.transparent,
+      ),
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: {
           TargetPlatform.android: CupertinoPageTransitionsBuilder(),

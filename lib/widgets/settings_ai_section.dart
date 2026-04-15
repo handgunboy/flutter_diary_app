@@ -158,35 +158,17 @@ class SettingsAiSection extends StatelessWidget {
             if (aiDataAccess) ...[
               const Divider(height: 24),
               Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Icon(
-                    Icons.auto_awesome,
+                    Icons.check_circle_outline,
                     color: Theme.of(context).colorScheme.primary,
                     size: 20,
                   ),
                   const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'AI 可以帮您：',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w500,
-                            color: Theme.of(context).colorScheme.onSurface,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        _FeatureItem(title: '📊 心情统计', description: '分析一段时间的心情分布'),
-                        _FeatureItem(title: '🍽️ 饮食回顾', description: '统计最近的饮食记录'),
-                        _FeatureItem(title: '🔍 关键词搜索', description: '搜索包含特定内容的日记'),
-                        _FeatureItem(title: '💭 心情筛选', description: '找出特定心情的日记'),
-                        _FeatureItem(title: '📅 日期查询', description: '查看指定日期范围的日记'),
-                        _FeatureItem(title: '📆 去年今天', description: '回顾去年今天的日记'),
-                        _FeatureItem(title: '📝 写作建议', description: '根据历史日记提供写作灵感'),
-                        _FeatureItem(title: '💡 智能分析', description: '基于数据给出生活建议'),
-                      ],
+                  Text(
+                    'AI 已获准访问日记数据',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurface,
                     ),
                   ),
                 ],
@@ -194,62 +176,6 @@ class SettingsAiSection extends StatelessWidget {
             ],
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _FeatureItem extends StatelessWidget {
-  final String title;
-  final String description;
-
-  const _FeatureItem({
-    required this.title,
-    required this.description,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = AppColors.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '•',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.primary,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(width: 6),
-          Expanded(
-            child: RichText(
-              text: TextSpan(
-                style: TextStyle(
-                  fontSize: 13,
-                  color: colors.textSecondary,
-                  height: 1.4,
-                ),
-                children: [
-                  TextSpan(
-                    text: title,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  TextSpan(
-                    text: ' - $description',
-                    style: TextStyle(
-                      color: colors.textMuted,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

@@ -53,6 +53,8 @@ dependencies:
   sembast: ^3.8.4
   path: ^1.9.0
   gallery_saver_plus: ^3.2.9
+  # WebDAV 客户端
+  webdav_client: ^1.2.1
 
 dev_dependencies:
   flutter_test:

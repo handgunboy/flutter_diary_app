@@ -1,3 +1,6 @@
+---
+trigger: always_on
+---
 # Diary App 项目规范（Flutter）
 
 ## 1. 目标与原则

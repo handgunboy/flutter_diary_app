@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../services/ai_service.dart';
 import '../services/langchain_service.dart';
 import '../services/chat_storage_service.dart';
 import '../theme/app_colors.dart';
@@ -16,7 +15,6 @@ class AiChatScreen extends StatefulWidget {
 }
 
 class _AiChatScreenState extends State<AiChatScreen> {
-  final AiService _aiService = AiService();
   final LangChainService _langChainService = LangChainService();
   final ChatStorageService _chatStorage = ChatStorageService();
   final TextEditingController _messageController = TextEditingController();
@@ -26,8 +24,6 @@ class _AiChatScreenState extends State<AiChatScreen> {
   bool _isConfigured = false;
   bool _isLoading = true;
 
-  // 聊天模式：false = 普通模式（Function Calling）, true = LangChain RAG 模式
-  bool _useLangChainRAG = false;
   // 会话 ID（用于 LangChain 记忆）
   final String _sessionId = 'default_session';
 
@@ -58,7 +54,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
 
   void _checkConfig() {
     setState(() {
-      _isConfigured = _aiService.isConfigured || _langChainService.isConfigured;
+      _isConfigured = _langChainService.isConfigured;
     });
   }
 
@@ -147,92 +143,16 @@ class _AiChatScreenState extends State<AiChatScreen> {
     });
 
     try {
-      if (_useLangChainRAG) {
-        // 使用 LangChain RAG 模式（带记忆和向量检索）
-        await for (final chunk in _langChainService.chatWithRAG(
-          sessionId: _sessionId,
-          message: message,
-        )) {
-          _streamBuffer.write(chunk);
-          _scheduleFlush(aiMessage);
-        }
-        // 确保最后的内容被刷新
-        _flushStreamBuffer(aiMessage);
-      } else {
-        // 使用原 Function Calling 模式
-        // 获取当前时间
-        final now = DateTime.now();
-        final currentTimeStr = DateFormat('yyyy年MM月dd日 HH:mm').format(now);
-
-        // 构建系统提示词
-        String systemPrompt = '''你是"小坡"，一款日记应用中的智能 AI 助手。你的主要职责是帮助用户更好地记录和管理他们的日常生活。
-
-**当前时间：$currentTimeStr**
-**重要提示：你已经有当前时间了，当用户询问时间相关问题时，直接使用上面的时间回答，不要调用任何工具查询时间。**
-
-## 你的能力：
-1. **日记分析**：帮助用户分析日记内容，提取关键信息（如饮食、心情、天气等）
-2. **写作建议**：当用户不知道如何记录时，提供写作灵感和建议
-3. **心情陪伴**：倾听用户的烦恼，提供情感支持和积极建议
-4. **生活助手**：回答日常问题，提供生活小贴士
-5. **数据查询**：通过工具函数查询用户的日记数据
-
-## 你可以使用的数据查询工具：
-- **getCurrentMonthDiaries**：获取当前月份的所有日记
-- **getRecentDiaries**：获取最近N天的日记（参数：days，必填）
-- **getDiariesByDateRange**：获取指定日期范围的日记（参数：startDate, endDate，格式yyyy-MM-dd，**两个参数都必须填写**）
-- **getDiariesByMood**：按心情筛选日记（参数：mood，如"开心"、"难过"）
-- **searchDiaries**：按关键词搜索日记（参数：keyword）
-- **getMoodStats**：统计最近N天的心情分布（参数：days，必填）
-- **getDietStats**：统计最近N天的饮食记录（参数：days，必填）
-- **getDiaryOnSameDayLastYear**：获取去年今天的日记
-
-**参数填写规则**：
-- 所有标记"必填"的参数必须提供具体值
-- 日期格式必须是 yyyy-MM-dd（如 2024-03-27）
-- 如果用户说"最近三个月"，你要先计算出具体日期再调用
-
-## 使用说明：
-- 当用户询问日记相关内容时，自动调用合适的工具获取数据
-- **重要**：调用工具时必须提供所有必需的参数，不能留空
-- 例如查询日期范围时，必须计算出具体的 startDate 和 endDate（格式：yyyy-MM-dd）
-- **特别重要**：系统已经提供了当前时间，你不需要也不应该调用工具来查询时间，直接回答用户即可
-- 获取数据后，基于数据生成有帮助的回复
-- 如果用户未授权数据访问，告知用户需要在设置中开启权限
-
-## 你的性格：
-- 友好、温暖、有耐心
-- 善于倾听，不打断用户
-- 回复简洁明了，避免冗长
-- 使用 emoji 让对话更生动
-
-## 回复格式：
-- 使用中文回复
-- 适当使用 emoji 增加亲和力
-- 重要信息可以分段列出
-
-现在，请以一个温暖的日记助手的身份，开始帮助用户吧！''';
-
-        // 构建消息历史
-        final List<Map<String, String>> messageHistory = [
-          ..._messages.take(_messages.length - 1).map((msg) => {
-            'role': msg.isUser ? 'user' : 'assistant',
-            'content': msg.content,
-          }),
-          {'role': 'user', 'content': message},
-        ];
-
-        // 使用 Function Calling 调用 AI
-        await for (final chunk in _aiService.chatStreamWithFunctions(
-          messageHistory,
-          systemPrompt: systemPrompt,
-        )) {
-          _streamBuffer.write(chunk);
-          _scheduleFlush(aiMessage);
-        }
-        // 确保最后的内容被刷新
-        _flushStreamBuffer(aiMessage);
+      // 使用 LangChain RAG 模式（带记忆和向量检索）
+      await for (final chunk in _langChainService.chatWithRAG(
+        sessionId: _sessionId,
+        message: message,
+      )) {
+        _streamBuffer.write(chunk);
+        _scheduleFlush(aiMessage);
       }
+      // 确保最后的内容被刷新
+      _flushStreamBuffer(aiMessage);
 
       // 保存更新后的消息
       await _saveMessages();
@@ -246,6 +166,36 @@ class _AiChatScreenState extends State<AiChatScreen> {
     setState(() {
       _isTyping = false;
     });
+  }
+
+  Future<void> _clearChat() async {
+    final colors = AppColors.of(context);
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('清空聊天记录'),
+        content: const Text('确定要清空所有聊天记录吗？此操作不可撤销。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: colors.danger),
+            child: const Text('清空'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await _chatStorage.clearMessages();
+      _langChainService.clearMemory(_sessionId);
+      setState(() {
+        _messages.clear();
+      });
+    }
   }
 
   void _showConfigDialog() {
@@ -276,37 +226,6 @@ class _AiChatScreenState extends State<AiChatScreen> {
     );
   }
 
-  Future<void> _clearChat() async {
-    final colors = AppColors.of(context);
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('清空聊天记录'),
-        content: const Text('确定要清空所有聊天记录吗？此操作不可撤销。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: colors.danger),
-            child: const Text('清空'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm == true) {
-      await _chatStorage.clearMessages();
-      // 同时清除 LangChain 记忆
-      _langChainService.clearMemory(_sessionId);
-      setState(() {
-        _messages.clear();
-      });
-    }
-  }
-
   // 检查是否需要显示时间分割线
   bool _shouldShowTimeDivider(int index) {
     if (index == 0) return true;
@@ -333,62 +252,18 @@ class _AiChatScreenState extends State<AiChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final accentColor = theme.colorScheme.primary;
-    
     return Scaffold(
       appBar: AppBar(
-        title: const Text('小坡'),
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        backgroundColor: theme.colorScheme.surface,
-        foregroundColor: theme.colorScheme.onSurface,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context),
+        ),
         actions: [
-          // 模式切换按钮
-          if (_isConfigured)
-            TextButton.icon(
-              onPressed: () {
-                setState(() {
-                  _useLangChainRAG = !_useLangChainRAG;
-                });
-                // 切换模式时清除 LangChain 记忆
-                if (_useLangChainRAG) {
-                  _langChainService.clearMemory(_sessionId);
-                }
-              },
-              icon: Icon(
-                _useLangChainRAG ? Icons.psychology : Icons.chat_bubble_outline,
-                size: 18,
-                color: _useLangChainRAG ? accentColor : AppUi.mutedIcon(context),
-              ),
-              label: Text(
-                _useLangChainRAG ? '本地RAG' : '普通模式',
-                style: TextStyle(
-                  color: _useLangChainRAG ? accentColor : AppUi.mutedText(context),
-                ),
-              ),
-            ),
           if (_messages.isNotEmpty)
             IconButton(
               icon: const Icon(Icons.delete_outline),
               onPressed: _clearChat,
               tooltip: '清空聊天记录',
-            ),
-          if (!_isConfigured)
-            TextButton.icon(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const SettingsScreen(),
-                  ),
-                ).then((_) => _checkConfig());
-              },
-              icon: const Icon(Icons.settings, size: 18),
-              label: const Text('配置'),
-              style: TextButton.styleFrom(
-                foregroundColor: theme.colorScheme.error,
-              ),
             ),
         ],
       ),
@@ -401,11 +276,10 @@ class _AiChatScreenState extends State<AiChatScreen> {
                       ? _buildEmptyState()
                       : ListView.builder(
                           controller: _scrollController,
-                          padding: AppUi.pagePadding,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                           reverse: true,
                           itemCount: _messages.length,
                           itemBuilder: (context, index) {
-                            // 反转后，最新消息在底部（索引0）
                             final reversedIndex = _messages.length - 1 - index;
                             return _buildMessageItem(reversedIndex);
                           },
@@ -471,16 +345,15 @@ class _AiChatScreenState extends State<AiChatScreen> {
             ),
           ),
           const SizedBox(height: 8),
-          Text(
-            !_isConfigured
-                ? '请先配置 AI API 才能使用\n前往设置页面配置 API 地址和密钥'
-                : '和我聊聊吧，我可以帮你：\n• 分析日记内容\n• 提供心情建议\n• 回答各种问题\n\n💡 切换到「本地RAG」模式可基于日记内容智能回答',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 14,
-              color: theme.colorScheme.onSurfaceVariant,
+          if (!_isConfigured)
+            Text(
+              '请先配置 AI API 才能使用',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
-          ),
           if (!_isConfigured) ...[
             const SizedBox(height: 24),
             ElevatedButton.icon(

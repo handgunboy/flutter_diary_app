@@ -11,6 +11,7 @@ class HomeHeaderBar extends StatelessWidget {
   final FocusNode searchFocusNode;
   final VoidCallback onToggleSearch;
   final VoidCallback onDateTap;
+  final VoidCallback onLocateToday;
   final VoidCallback onOpenRecycleBin;
   final VoidCallback onOpenAiChat;
   final VoidCallback onOpenSettings;
@@ -26,6 +27,7 @@ class HomeHeaderBar extends StatelessWidget {
     required this.searchFocusNode,
     required this.onToggleSearch,
     required this.onDateTap,
+    required this.onLocateToday,
     required this.onOpenRecycleBin,
     required this.onOpenAiChat,
     required this.onOpenSettings,
@@ -148,6 +150,11 @@ class HomeHeaderBar extends StatelessWidget {
             ),
             onPressed: onToggleSearch,
             tooltip: isSearching ? '关闭搜索' : '搜索',
+          ),
+          IconButton(
+            icon: const Icon(Icons.my_location),
+            onPressed: onLocateToday,
+            tooltip: '定位到今天',
           ),
           IconButton(
             icon: const Icon(Icons.delete_outline),

@@ -334,6 +334,45 @@ class StorageService {
     }
   }
 
+  // 导出日记数据（不含图片）
+  Future<String?> exportDataOnly() async {
+    try {
+      final entries = await _getAllEntriesIncludingDeleted();
+      
+      // 创建数据 JSON（不包含图片列表）
+      final data = {
+        'version': '1.0',
+        'exportTime': DateTime.now().toIso8601String(),
+        'entries': entries.map((e) => e.toJson()).toList(),
+        'images': <String>[], // 空图片列表
+      };
+      
+      // 创建 ZIP 文件
+      final archive = Archive();
+      
+      // 添加数据文件
+      final jsonBytes = utf8.encode(jsonEncode(data));
+      archive.addFile(ArchiveFile('data.json', jsonBytes.length, jsonBytes));
+      
+      // 编码 ZIP
+      final zipBytes = ZipEncoder().encode(archive);
+      if (zipBytes == null) return null;
+      
+      // 保存到临时文件
+      final tempDir = await getTemporaryDirectory();
+      final fileName = 'diary_data_${DateTime.now().millisecondsSinceEpoch}.zip';
+      final zipPath = '${tempDir.path}/$fileName';
+      final zipFile = File(zipPath);
+      await zipFile.writeAsBytes(zipBytes);
+      
+      developer.log('✅ 数据导出成功（不含图片）', name: 'StorageService');
+      return zipPath;
+    } catch (e) {
+      developer.log('导出数据失败: $e', name: 'StorageService');
+      return null;
+    }
+  }
+
   // 导出所有日记数据为 ZIP（包含图片）
   Future<String?> exportDataWithImages() async {
     try {

@@ -438,6 +438,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 onDateTap: () {
                   _scaffoldKey.currentState?.openDrawer();
                 },
+                onLocateToday: _locateToToday,
                 onOpenRecycleBin: () async {
                   final result = await Navigator.push(
                     context,
@@ -516,27 +517,12 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       ),
-      floatingActionButton: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          FloatingActionButton.small(
-            heroTag: 'locate_today_fab',
-            onPressed: _locateToToday,
-            backgroundColor: AppUi.secondaryFabBackground(context),
-            foregroundColor: AppUi.secondaryFabForeground(context),
-            tooltip: '定位到今天',
-            child: const Icon(Icons.my_location),
-          ),
-          const SizedBox(height: 12),
-          FloatingActionButton(
-            heroTag: 'write_diary_fab',
-            onPressed: () => _navigateToWriteDiary(),
-            backgroundColor: colors.actionPrimaryBackground,
-            foregroundColor: colors.actionPrimaryForeground,
-            child: const Icon(Icons.edit),
-          ),
-        ],
+      floatingActionButton: FloatingActionButton(
+        heroTag: 'write_diary_fab',
+        onPressed: () => _navigateToWriteDiary(),
+        backgroundColor: colors.actionPrimaryBackground,
+        foregroundColor: colors.actionPrimaryForeground,
+        child: const Icon(Icons.edit),
       ),
       ),
     );
