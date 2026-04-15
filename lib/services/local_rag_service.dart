@@ -154,13 +154,19 @@ class LocalRagService {
   List<String> _tokenize(String text) {
     final tokens = <String>[];
 
-    // 提取中文词语（2-4 个字）
-    for (int i = 0; i < text.length - 1; i++) {
-      for (int len = 2; len <= 4 && i + len <= text.length; len++) {
-        final word = text.substring(i, i + len);
-        if (_isChineseWord(word)) {
-          tokens.add(word);
+    // 使用正则一次性提取所有连续中文字符，然后生成 2-4 字词语
+    final chinesePattern = RegExp(r'[\u4e00-\u9fa5]+');
+    for (final match in chinesePattern.allMatches(text)) {
+      final chineseText = match.group(0)!;
+      // 从提取的中文文本中生成 2-4 字词语
+      for (int i = 0; i < chineseText.length - 1; i++) {
+        for (int len = 2; len <= 4 && i + len <= chineseText.length; len++) {
+          tokens.add(chineseText.substring(i, i + len));
         }
+      }
+      // 添加单字
+      for (int i = 0; i < chineseText.length; i++) {
+        tokens.add(chineseText[i]);
       }
     }
 
@@ -172,28 +178,7 @@ class LocalRagService {
         .where((w) => w.length >= 2 && !_stopWords.contains(w));
     tokens.addAll(englishWords);
 
-    // 添加单字（中文）
-    for (int i = 0; i < text.length; i++) {
-      final char = text[i];
-      if (_isChinese(char) && !_stopWords.contains(char)) {
-        tokens.add(char);
-      }
-    }
-
     return tokens.where((t) => !_stopWords.contains(t)).toList();
-  }
-
-  /// 判断是否为中文
-  bool _isChinese(String char) {
-    return RegExp(r'[\u4e00-\u9fa5]').hasMatch(char);
-  }
-
-  /// 判断是否为中文字词
-  bool _isChineseWord(String word) {
-    return word.runes.every((r) {
-      final char = String.fromCharCode(r);
-      return _isChinese(char);
-    });
   }
 
   /// 计算 IDF（逆文档频率）

@@ -8,7 +8,32 @@ import 'image_gallery_screen.dart';
 import 'mood_icons.dart';
 
 class DiaryCard extends StatelessWidget {
+  // LRU 缓存限制，防止内存泄漏
+  static const int _maxCacheSize = 100;
   static final Map<String, File> _imageFileCache = {};
+  static final List<String> _accessOrder = [];  // 访问顺序用于 LRU
+
+  static File _getCachedFile(String path) {
+    // 如果已存在，更新访问顺序
+    if (_imageFileCache.containsKey(path)) {
+      _accessOrder.remove(path);
+      _accessOrder.add(path);
+      return _imageFileCache[path]!;
+    }
+
+    // 如果缓存满了，移除最久未访问的
+    if (_imageFileCache.length >= _maxCacheSize && _accessOrder.isNotEmpty) {
+      final oldestKey = _accessOrder.removeAt(0);
+      _imageFileCache.remove(oldestKey);
+    }
+
+    // 添加到缓存
+    final file = File(path);
+    _imageFileCache[path] = file;
+    _accessOrder.add(path);
+    return file;
+  }
+
   final DiaryEntry entry;
   final VoidCallback onTap;
   final VoidCallback onToggleFavorite;
@@ -299,7 +324,7 @@ class DiaryCard extends StatelessWidget {
         itemCount: imagesToShow.length,
         itemBuilder: (context, index) {
           final imagePath = imagesToShow[index];
-          final imageFile = _imageFileCache.putIfAbsent(imagePath, () => File(imagePath));
+          final imageFile = _getCachedFile(imagePath);
           return Padding(
             padding: EdgeInsets.only(right: index < imagesToShow.length - 1 ? 8 : 0),
             child: GestureDetector(

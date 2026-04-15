@@ -264,9 +264,12 @@ class WebdavService {
       
       final files = await client.readDir(remoteDir);
       final zipFiles = files
-          .where((f) => f.name?.endsWith('.zip') == true)
+          .where((f) => 
+              f.name != null && 
+              f.name!.endsWith('.zip') && 
+              (f.size ?? 0) > 0)  // 过滤空大小文件
           .map((f) {
-            final name = f.name ?? '';
+            final name = f.name!;  // 已确保不为 null
             // 从文件名解析时间戳：diary_backup_1234567890.zip 或 diary_data_1234567890.zip
             DateTime? parsedTime;
             final match = RegExp(r'(\d{10,})').firstMatch(name);

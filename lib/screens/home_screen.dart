@@ -117,19 +117,15 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   String _buildEntriesFingerprint(List<DiaryEntry> entries) {
-    final buffer = StringBuffer()..write(entries.length);
+    // 使用哈希替代字符串拼接，性能从 O(N) 字符串操作优化为 O(N) 整数运算
+    int hash = entries.length;
     for (final entry in entries) {
-      buffer
-        ..write('|')
-        ..write(entry.id)
-        ..write(':')
-        ..write(entry.updatedAt.microsecondsSinceEpoch)
-        ..write(':')
-        ..write(entry.date.microsecondsSinceEpoch)
-        ..write(':')
-        ..write(entry.isFavorite ? 1 : 0);
+      hash = hash * 31 + entry.id.hashCode;
+      hash = hash * 31 + entry.updatedAt.hashCode;
+      hash = hash * 31 + entry.date.hashCode;
+      hash = hash * 31 + (entry.isFavorite ? 1 : 0);
     }
-    return buffer.toString();
+    return hash.toString();
   }
 
   void _toggleSearch() {

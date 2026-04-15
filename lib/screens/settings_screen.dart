@@ -352,8 +352,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       if (!mounted) return;
 
-      // 更新进度
-      Navigator.pop(context); // 关闭下载进度
+      // 更新进度 - 安全关闭对话框
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context); // 关闭下载进度
+      }
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -364,16 +366,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final success = await _storageService.importDataFromZip(zipPath);
 
       if (mounted) {
-        Navigator.pop(context); // 关闭导入进度
+        if (Navigator.canPop(context)) {
+          Navigator.pop(context); // 关闭导入进度
+        }
         AppTopToast.show(context, success ? '恢复成功' : '恢复失败', isError: !success);
-        if (success) {
+        if (success && Navigator.canPop(context)) {
           Navigator.pop(context, true);
         }
       }
     } catch (e) {
       if (mounted) {
         // 确保关闭任何打开的对话框
-        Navigator.pop(context);
+        if (Navigator.canPop(context)) {
+          Navigator.pop(context);
+        }
         AppTopToast.show(context, '恢复失败: $e', isError: true);
       }
     }
