@@ -471,7 +471,7 @@ ${context.isNotEmpty && context != '没有找到相关的日记记录。' ? '以
                     final toolCallId = 'call_${DateTime.now().millisecondsSinceEpoch}';
                     functionMessages.add({
                       'role': 'assistant',
-                      'content': null,
+                      'content': '',  // 使用空字符串替代 null，兼容更多 API
                       'tool_calls': [{
                         'id': toolCallId,
                         'type': 'function',
