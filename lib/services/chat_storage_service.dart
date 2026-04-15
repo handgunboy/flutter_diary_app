@@ -31,11 +31,19 @@ class ChatStorageService {
       final startIndex = messagesJson.length > limit ? messagesJson.length - limit : 0;
       final recentMessages = messagesJson.sublist(startIndex);
 
-      return recentMessages.map((json) => ChatMessage(
-        content: json['content'],
-        isUser: json['isUser'],
-        timestamp: DateTime.parse(json['timestamp']),
-      )).toList();
+      final messages = <ChatMessage>[];
+      for (final json in recentMessages) {
+        try {
+          messages.add(ChatMessage(
+            content: json['content'] as String? ?? '',
+            isUser: json['isUser'] as bool? ?? false,
+            timestamp: DateTime.parse(json['timestamp'] as String),
+          ));
+        } catch (_) {
+          // 跳过损坏的记录
+        }
+      }
+      return messages;
     } catch (e) {
       return [];
     }

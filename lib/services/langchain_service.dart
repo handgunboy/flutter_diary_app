@@ -35,14 +35,22 @@ class LangChainService {
   final Map<String, (ToolsAgent, AgentExecutor)> _agents = {};
 
   /// 初始化或重新初始化 LLM
-  void _initLLM() {
+  Future<bool> _initLLM() async {
     if (!_themeService.hasAiConfig) {
       _llm = null;
-      return;
+      return false;
     }
 
     final apiKey = _themeService.aiApiKey;
     final baseUrl = _themeService.aiApiUrl;
+
+    // 确保 ThemeService 已完成初始化
+    await _themeService.ensureInitialized();
+
+    if (apiKey.isEmpty || baseUrl.isEmpty) {
+      _llm = null;
+      return false;
+    }
 
     // 检测是否为 DeepSeek
     final isDeepSeek = baseUrl.contains('deepseek');
@@ -56,16 +64,23 @@ class LangChainService {
       finalBaseUrl = baseUrl.substring(0, baseUrl.length - 1);
     }
 
-    _llm = ChatOpenAI(
-      apiKey: apiKey,
-      baseUrl: '$finalBaseUrl/v1',
-      defaultOptions: ChatOpenAIOptions(
-        model: modelName,
-        temperature: 0.7,
-      ),
-    );
+    try {
+      _llm = ChatOpenAI(
+        apiKey: apiKey,
+        baseUrl: '$finalBaseUrl/v1',
+        defaultOptions: ChatOpenAIOptions(
+          model: modelName,
+          temperature: 0.7,
+        ),
+      );
 
-    developer.log('🤖 LangChain LLM 初始化完成: $modelName', name: 'LangChainService');
+      developer.log('🤖 LangChain LLM 初始化完成: $modelName', name: 'LangChainService');
+      return true;
+    } catch (e) {
+      developer.log('❌ LLM 初始化失败: $e', name: 'LangChainService');
+      _llm = null;
+      return false;
+    }
   }
 
   /// 创建日记查询工具
@@ -212,6 +227,10 @@ ${context.isNotEmpty && context != '没有找到相关的日记记录。' ? '以
 
   /// 获取或创建 Agent
   (ToolsAgent, AgentExecutor) _getOrCreateAgent(String sessionId) {
+    if (_llm == null) {
+      throw Exception('LLM 未初始化，请检查 AI API 配置');
+    }
+
     if (!_agents.containsKey(sessionId)) {
       // 使用 WindowMemory 限制保留最近 15 轮对话
       final memory = ConversationBufferWindowMemory(
@@ -259,11 +278,10 @@ ${context.isNotEmpty && context != '没有找到相关的日记记录。' ? '以
     }
 
     if (_llm == null) {
-      _initLLM();
-    }
-
-    if (_llm == null) {
-      throw Exception('LLM 初始化失败');
+      final success = await _initLLM();
+      if (!success) {
+        throw Exception('LLM 初始化失败，请检查 AI API 配置');
+      }
     }
 
     // 使用 Agent 进行聊天
@@ -608,7 +626,10 @@ ${context.isNotEmpty && context != '没有找到相关的日记记录。' ? '以
     }
 
     if (_llm == null) {
-      _initLLM();
+      final success = await _initLLM();
+      if (!success) {
+        return {'error': 'LLM 初始化失败，请检查 AI API 配置'};
+      }
     }
 
     // 获取指定时间范围的日记
@@ -684,7 +705,10 @@ $diariesText
     }
 
     if (_llm == null) {
-      _initLLM();
+      final success = await _initLLM();
+      if (!success) {
+        return 'LLM 初始化失败，请检查 AI API 配置';
+      }
     }
 
     // 获取日记数据

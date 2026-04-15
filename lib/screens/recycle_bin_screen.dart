@@ -115,9 +115,8 @@ class _RecycleBinScreenState extends State<RecycleBinScreen> {
     );
 
     if (confirm == true) {
-      for (final entry in _deletedEntries) {
-        await _storageService.permanentlyDeleteEntry(entry.id);
-      }
+      final idsToDelete = _deletedEntries.map((e) => e.id).toList();
+      await _storageService.permanentlyDeleteEntries(idsToDelete);
       _loadDeletedEntries();
       if (mounted) {
         AppTopToast.show(context, '回收站已清空');

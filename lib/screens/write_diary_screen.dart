@@ -301,7 +301,7 @@ class _WriteDiaryScreenState extends State<WriteDiaryScreen> {
   DiaryEntry _buildEntryForSave(DateTime now) {
     final content = _contentController.text.trim();
     return DiaryEntry(
-      id: widget.existingEntry?.id ?? now.millisecondsSinceEpoch.toString(),
+      id: widget.existingEntry?.id ?? '${now.millisecondsSinceEpoch}_${now.microsecondsSinceEpoch % 1000}',
       date: widget.selectedDate,
       title: _buildAutoTitle(content),
       content: content,

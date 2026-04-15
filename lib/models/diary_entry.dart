@@ -58,23 +58,33 @@ class DiaryEntry {
 
   factory DiaryEntry.fromJson(Map<String, dynamic> json) {
     return DiaryEntry(
-      id: json['id'],
-      date: DateTime.parse(json['date']),
-      title: json['title'],
-      content: json['content'],
-      breakfast: json['breakfast'],
-      lunch: json['lunch'],
-      dinner: json['dinner'],
-      snacks: json['snacks'],
-      mood: json['mood'],
-      weather: json['weather'],
-      weight: json['weight'],
+      id: json['id'] as String? ?? '',
+      date: _safeParseDate(json['date']),
+      title: json['title'] as String? ?? '',
+      content: json['content'] as String? ?? '',
+      breakfast: json['breakfast'] as String?,
+      lunch: json['lunch'] as String?,
+      dinner: json['dinner'] as String?,
+      snacks: json['snacks'] as String?,
+      mood: json['mood'] as String?,
+      weather: json['weather'] as String?,
+      weight: json['weight'] as String?,
       images: List<String>.from(json['images'] ?? []),
-      createdAt: DateTime.parse(json['createdAt']),
-      updatedAt: DateTime.parse(json['updatedAt']),
-      isFavorite: json['isFavorite'] ?? false,
-      deletedAt: json['deletedAt'] != null ? DateTime.parse(json['deletedAt']) : null,
+      createdAt: _safeParseDate(json['createdAt']),
+      updatedAt: _safeParseDate(json['updatedAt']),
+      isFavorite: json['isFavorite'] as bool? ?? false,
+      deletedAt: json['deletedAt'] != null ? _safeParseDate(json['deletedAt']) : null,
     );
+  }
+
+  /// 安全解析日期，失败时返回当前时间
+  static DateTime _safeParseDate(dynamic value) {
+    if (value == null) return DateTime.now();
+    try {
+      return DateTime.parse(value.toString());
+    } catch (_) {
+      return DateTime.now();
+    }
   }
 
   DiaryEntry copyWith({

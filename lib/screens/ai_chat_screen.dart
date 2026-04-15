@@ -63,6 +63,8 @@ class _AiChatScreenState extends State<AiChatScreen> {
     _messageController.dispose();
     _scrollController.dispose();
     _streamThrottleTimer?.cancel();
+    // 清理当前会话的 Agent，防止内存泄漏
+    _langChainService.clearMemory(_sessionId);
     super.dispose();
   }
 
@@ -158,7 +160,11 @@ class _AiChatScreenState extends State<AiChatScreen> {
       await _saveMessages();
     } catch (e) {
       setState(() {
-        aiMessage.content = '抱歉，发生了错误：$e';
+        if (aiMessage.content.isEmpty) {
+          aiMessage.content = '抱歉，发生了错误：$e';
+        } else {
+          aiMessage.content += '\n\n[连接中断，回复不完整]';
+        }
       });
       await _saveMessages();
     }

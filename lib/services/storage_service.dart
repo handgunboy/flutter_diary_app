@@ -156,6 +156,16 @@ class StorageService {
     await _saveAllEntries(entries, prefs: prefs);
   }
 
+  // 批量永久删除日记（用于清空回收站）
+  Future<void> permanentlyDeleteEntries(List<String> ids) async {
+    final prefs = await _prefs;
+    final entries = await _getAllEntriesIncludingDeleted();
+    final idSet = ids.toSet();
+
+    entries.removeWhere((e) => idSet.contains(e.id));
+    await _saveAllEntries(entries, prefs: prefs);
+  }
+
   // 清理超过30天的已删除日记
   Future<void> cleanupOldDeletedEntries() async {
     final prefs = await _prefs;
